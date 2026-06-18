@@ -90,7 +90,7 @@ final class PlayerService {
     private weak var queueManager: QueueManager?
     private weak var playerControlsLayoutService: PlayerControlsLayoutService?
     private weak var handoffManager: HandoffManager?
-    private weak var invidiousHistorySync: InvidiousHistorySyncService?
+    private weak var invidiousHistorySync: InvidiousHistorySyncService? // FORK (playback-sync)
 
     // MARK: - Private State
 
@@ -349,8 +349,8 @@ final class PlayerService {
             // Use state.duration as fallback for quality switching when video.duration might be 0
             let effectiveDuration = video.duration > 0 ? video.duration : state.duration
             let completionThreshold = effectiveDuration * 0.9
-            // Fall back to a position synced from the Invidious account when
-            // there's no local history (e.g. first time on this device).
+            // FORK (playback-sync): fall back to a position synced from the
+            // Invidious account when there's no local history (first time on this device).
             let savedProgress = dataManager.watchProgress(for: video.id.videoID)
                 ?? invidiousHistorySync?.cachedPosition(for: video.id.videoID)
             LoggingService.shared.logPlayer("Replay check: savedProgress=\(savedProgress ?? -1), startTime=\(startTime ?? -1), duration=\(video.duration), threshold=\(completionThreshold)")

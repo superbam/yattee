@@ -400,38 +400,6 @@ extension SettingsManager {
         }
     }
 
-    /// Whether to hide Shorts from feeds, search, and channel video lists.
-    /// Detection prefers the backend's authoritative isShort flag, falling back
-    /// to a length heuristic. Default is false.
-    var hideShorts: Bool {
-        get {
-            if let cached = _hideShorts { return cached }
-            let value = localDefaults.bool(forKey: "hideShorts")
-            _hideShorts = value
-            return value
-        }
-        set {
-            _hideShorts = newValue
-            localDefaults.set(newValue, forKey: "hideShorts")
-        }
-    }
-
-    /// Whether to sync watch history and playback position with the signed-in
-    /// Invidious account (requires the shorts-filter fork's positions endpoint).
-    /// Independent of iCloud sync. Default is false.
-    var syncWatchHistoryWithInvidiousAccount: Bool {
-        get {
-            if let cached = _syncWatchHistoryWithInvidiousAccount { return cached }
-            let value = localDefaults.bool(forKey: "syncWatchHistoryWithInvidiousAccount")
-            _syncWatchHistoryWithInvidiousAccount = value
-            return value
-        }
-        set {
-            _syncWatchHistoryWithInvidiousAccount = newValue
-            localDefaults.set(newValue, forKey: "syncWatchHistoryWithInvidiousAccount")
-        }
-    }
-
     /// Whether to save recent search queries. Default is true.
     /// When disabled, new search queries won't be saved. Existing entries remain visible.
     /// Incognito mode overrides this setting.

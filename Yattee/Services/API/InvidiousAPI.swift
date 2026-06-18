@@ -552,8 +552,9 @@ actor InvidiousAPI: InstanceAPI {
 
     // MARK: - Watch History & Playback Position Sync
     //
-    // Watched state uses the stock /api/v1/auth/history endpoints. Resume
-    // positions use the shorts-filter fork's /api/v1/auth/positions endpoints.
+    // FORK (playback-sync): kept in this file because httpClient is file-private
+    // to this actor. Watched state uses the stock /api/v1/auth/history endpoints;
+    // resume positions use the shorts-filter fork's /api/v1/auth/positions.
 
     /// Returns the IDs of videos the account has marked watched (newest first).
     func watchHistory(instance: Instance, sid: String) async throws -> [String] {

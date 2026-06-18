@@ -271,8 +271,8 @@ final class AppEnvironment {
             feedCache: .shared
         )
 
-        // Initialize Invidious watch-history / playback-position sync, then
-        // pull once on launch (a no-op unless enabled and signed in).
+        // FORK (playback-sync): init Invidious watch-history / position sync,
+        // then pull once on launch (a no-op unless enabled and signed in).
         let historySync = InvidiousHistorySyncService(
             invidiousAPI: invidiousAPI,
             credentialsManager: invidiousCreds,

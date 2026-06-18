@@ -178,6 +178,7 @@ final class SettingsManager {
     var _saveRecentSearches: Bool?
     var _saveRecentChannels: Bool?
     var _saveRecentPlaylists: Bool?
+    // FORK: backing storage for fork settings (accessors in SettingsManager+ShortsSync.swift)
     var _hideShorts: Bool?
     var _syncWatchHistoryWithInvidiousAccount: Bool?
 

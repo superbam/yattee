@@ -87,11 +87,14 @@ final class InvidiousHistorySyncService {
 
     // MARK: - Pull
 
-    /// Fetches watched IDs and positions once, seeding local state.
+    /// Fetches watched IDs and positions once, seeding local state. The two
+    /// requests run concurrently since they're independent.
     func sync() async {
         guard enabled, let (instance, sid) = authenticatedInstance() else { return }
-        let watched = (try? await invidiousAPI.watchHistory(instance: instance, sid: sid)) ?? []
-        let positions = (try? await invidiousAPI.playbackPositions(instance: instance, sid: sid)) ?? [:]
+        async let watchedTask = invidiousAPI.watchHistory(instance: instance, sid: sid)
+        async let positionsTask = invidiousAPI.playbackPositions(instance: instance, sid: sid)
+        let watched = (try? await watchedTask) ?? []
+        let positions = (try? await positionsTask) ?? [:]
         serverPositions = positions
         dataManager.markFinishedFromSync(videoIDs: Set(watched))
         LoggingService.shared.info(
