@@ -178,6 +178,8 @@ final class SettingsManager {
     var _saveRecentSearches: Bool?
     var _saveRecentChannels: Bool?
     var _saveRecentPlaylists: Bool?
+    var _hideShorts: Bool?
+    var _syncWatchHistoryWithInvidiousAccount: Bool?
 
     // Subscription account settings
     var _subscriptionAccount: SubscriptionAccount?

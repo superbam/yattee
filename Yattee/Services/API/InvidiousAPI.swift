@@ -549,6 +549,74 @@ actor InvidiousAPI: InstanceAPI {
             customHeaders: ["Cookie": "SID=\(sid)"]
         )
     }
+
+    // MARK: - Watch History & Playback Position Sync
+    //
+    // Watched state uses the stock /api/v1/auth/history endpoints. Resume
+    // positions use the shorts-filter fork's /api/v1/auth/positions endpoints.
+
+    /// Returns the IDs of videos the account has marked watched (newest first).
+    func watchHistory(instance: Instance, sid: String) async throws -> [String] {
+        let endpoint = GenericEndpoint.get("/api/v1/auth/history")
+        return try await httpClient.fetch(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
+
+    func markWatched(videoID: String, instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint.post("/api/v1/auth/history/\(videoID)")
+        try await httpClient.sendRequest(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
+
+    func markUnwatched(videoID: String, instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint.delete("/api/v1/auth/history/\(videoID)")
+        try await httpClient.sendRequest(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
+
+    /// Returns saved resume positions as a `{ videoID: seconds }` map.
+    /// Decoded with a plain decoder: the shared HTTPClient decoder uses
+    /// `.convertFromSnakeCase`, which would corrupt video-ID keys containing "_".
+    func playbackPositions(instance: Instance, sid: String) async throws -> [String: Double] {
+        let endpoint = GenericEndpoint.get("/api/v1/auth/positions")
+        let data = try await httpClient.fetchData(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+        return (try? JSONDecoder().decode([String: Double].self, from: data)) ?? [:]
+    }
+
+    func setPlaybackPosition(videoID: String, seconds: Double, instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint(
+            path: "/api/v1/auth/positions/\(videoID)",
+            method: .post,
+            queryItems: [URLQueryItem(name: "position", value: String(Int(seconds)))]
+        )
+        try await httpClient.sendRequest(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
+
+    func deletePlaybackPosition(videoID: String, instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint.delete("/api/v1/auth/positions/\(videoID)")
+        try await httpClient.sendRequest(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
 }
 
 // MARK: - Video Proxy
@@ -826,6 +894,7 @@ private struct InvidiousVideo: Decodable, Sendable {
     let liveNow: Bool?
     let isUpcoming: Bool?
     let premiereTimestamp: Int64?
+    let isShort: Bool?
 
     nonisolated func toVideo(baseURL: URL) -> Video {
         Video(
@@ -841,7 +910,8 @@ private struct InvidiousVideo: Decodable, Sendable {
             thumbnails: videoThumbnails?.map { $0.toThumbnail(baseURL: baseURL) } ?? [],
             isLive: liveNow ?? false,
             isUpcoming: isUpcoming ?? false,
-            scheduledStartTime: premiereTimestamp.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+            scheduledStartTime: premiereTimestamp.map { Date(timeIntervalSince1970: TimeInterval($0)) },
+            isShort: isShort ?? (lengthSeconds > 0 && lengthSeconds <= 60)
         )
     }
 }
@@ -1058,7 +1128,8 @@ private struct InvidiousRecommendedVideo: Decodable, Sendable {
             thumbnails: videoThumbnails?.map { $0.toThumbnail(baseURL: baseURL) } ?? [],
             isLive: false,
             isUpcoming: false,
-            scheduledStartTime: nil
+            scheduledStartTime: nil,
+            isShort: lengthSeconds > 0 && lengthSeconds <= 60
         )
     }
 

@@ -60,6 +60,14 @@ struct PrivacySettingsView: View {
                     isOn: Bindable(settingsManager).saveWatchHistory
                 )
 
+                if !(appEnvironment?.invidiousCredentialsManager.loggedInInstanceIDs.isEmpty ?? true) {
+                    Toggle(
+                        "Sync history and playback position with Invidious account",
+                        isOn: Bindable(settingsManager).syncWatchHistoryWithInvidiousAccount
+                    )
+                    .disabled(!settingsManager.saveWatchHistory)
+                }
+
                 PlatformMenuPicker(
                     String(localized: "settings.behavior.historyRetention"),
                     selection: Binding(

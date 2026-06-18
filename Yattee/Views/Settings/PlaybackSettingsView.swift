@@ -279,6 +279,8 @@ private struct BehaviorSection: View {
                 isOn: $settings.backgroundPlaybackEnabled
             )
 
+            Toggle("Hide Shorts", isOn: $settings.hideShorts)
+
             #if os(tvOS)
             Toggle(
                 String(localized: "settings.playback.tvOSMenuButtonClosesVideo"),

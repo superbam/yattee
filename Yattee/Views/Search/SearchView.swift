@@ -900,9 +900,16 @@ struct SearchView: View {
     private var unifiedResults: [SearchResultItem] {
         guard let vm = searchViewModel else { return [] }
 
+        // Drop Short videos when the user has opted to hide them.
+        let hideShorts = appEnvironment?.settingsManager.hideShorts ?? false
+        func keep(_ item: SearchResultItem) -> Bool {
+            if hideShorts, case let .video(video, _) = item { return !video.isShort }
+            return true
+        }
+
         // For .all type, use resultItems which preserves API order
         if vm.filters.type == .all {
-            return vm.resultItems
+            return vm.resultItems.filter(keep)
         }
 
         // For specific types, prioritize that type first
@@ -947,7 +954,7 @@ struct SearchView: View {
             break
         }
 
-        return results
+        return results.filter(keep)
     }
 
     /// Background style based on layout and list style.

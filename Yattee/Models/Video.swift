@@ -51,6 +51,10 @@ struct Video: Identifiable, Codable, Sendable {
     /// Related/recommended videos (populated from video details API).
     let relatedVideos: [Video]?
 
+    /// Whether this is a YouTube Short. Prefer the backend's authoritative
+    /// flag (the shorts-filter Invidious fork); falls back to a length heuristic.
+    let isShort: Bool
+
     // MARK: - Explicit Initializer
 
     init(
@@ -67,7 +71,8 @@ struct Video: Identifiable, Codable, Sendable {
         isLive: Bool,
         isUpcoming: Bool,
         scheduledStartTime: Date?,
-        relatedVideos: [Video]? = nil
+        relatedVideos: [Video]? = nil,
+        isShort: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -83,6 +88,7 @@ struct Video: Identifiable, Codable, Sendable {
         self.isUpcoming = isUpcoming
         self.scheduledStartTime = scheduledStartTime
         self.relatedVideos = relatedVideos
+        self.isShort = isShort
     }
 
     // MARK: - Computed Properties

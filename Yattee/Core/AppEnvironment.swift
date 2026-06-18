@@ -52,6 +52,7 @@ final class AppEnvironment {
     let invidiousAPI: InvidiousAPI
     let pipedAPI: PipedAPI
     let subscriptionAccountValidator: SubscriptionAccountValidator
+    let invidiousHistorySync: InvidiousHistorySyncService
     let playerControlsLayoutService: PlayerControlsLayoutService
     let legacyMigrationService: LegacyDataMigrationService
     let sourcesSettings: SourcesSettings
@@ -269,6 +270,19 @@ final class AppEnvironment {
             toastManager: toast,
             feedCache: .shared
         )
+
+        // Initialize Invidious watch-history / playback-position sync, then
+        // pull once on launch (a no-op unless enabled and signed in).
+        let historySync = InvidiousHistorySyncService(
+            invidiousAPI: invidiousAPI,
+            credentialsManager: invidiousCreds,
+            instancesManager: instances,
+            settingsManager: settings,
+            dataManager: dm
+        )
+        self.invidiousHistorySync = historySync
+        player.setInvidiousHistorySync(historySync)
+        Task { await historySync.sync() }
 
         // Initialize Player Controls Layout Service
         let layoutService = PlayerControlsLayoutService()

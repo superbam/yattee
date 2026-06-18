@@ -98,7 +98,7 @@ struct SubscriptionsView: View {
             }
         }
 
-        return videos
+        return videos.filteringShorts(appEnvironment?.settingsManager.hideShorts ?? false)
     }
 
     /// The currently selected subscription (if any).

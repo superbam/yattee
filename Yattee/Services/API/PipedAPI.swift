@@ -537,7 +537,8 @@ private struct PipedVideo: Decodable, Sendable {
             } ?? [],
             isLive: duration == -1,
             isUpcoming: false,
-            scheduledStartTime: nil
+            scheduledStartTime: nil,
+            isShort: isShort ?? (duration > 0 && duration <= 60)
         )
     }
 }
@@ -776,7 +777,8 @@ private struct PipedSearchItem: Decodable, Sendable {
             } ?? [],
             isLive: duration == -1,
             isUpcoming: false,
-            scheduledStartTime: nil
+            scheduledStartTime: nil,
+            isShort: (duration ?? 0) > 0 && (duration ?? 0) <= 60
         )
     }
 

@@ -90,6 +90,7 @@ final class PlayerService {
     private weak var queueManager: QueueManager?
     private weak var playerControlsLayoutService: PlayerControlsLayoutService?
     private weak var handoffManager: HandoffManager?
+    private weak var invidiousHistorySync: InvidiousHistorySyncService?
 
     // MARK: - Private State
 
@@ -348,7 +349,10 @@ final class PlayerService {
             // Use state.duration as fallback for quality switching when video.duration might be 0
             let effectiveDuration = video.duration > 0 ? video.duration : state.duration
             let completionThreshold = effectiveDuration * 0.9
+            // Fall back to a position synced from the Invidious account when
+            // there's no local history (e.g. first time on this device).
             let savedProgress = dataManager.watchProgress(for: video.id.videoID)
+                ?? invidiousHistorySync?.cachedPosition(for: video.id.videoID)
             LoggingService.shared.logPlayer("Replay check: savedProgress=\(savedProgress ?? -1), startTime=\(startTime ?? -1), duration=\(video.duration), threshold=\(completionThreshold)")
 
             if let startTime {
@@ -2305,6 +2309,10 @@ final class PlayerService {
         self.handoffManager = manager
     }
 
+    func setInvidiousHistorySync(_ service: InvidiousHistorySyncService) {
+        self.invidiousHistorySync = service
+    }
+
     #if os(iOS)
     /// Called when the player sheet appears.
     func playerSheetDidAppear() {
@@ -2438,6 +2446,9 @@ final class PlayerService {
         // Save locally only during playback - no iCloud sync overhead
         dataManager.updateWatchProgressLocal(for: video, seconds: state.currentTime, duration: state.duration)
 
+        // Push the position to the Invidious account (debounced internally).
+        invidiousHistorySync?.pushPosition(videoID: video.id.videoID, seconds: state.currentTime)
+
         // Update Handoff activity with current playback time
         handoffManager?.updatePlaybackTime(state.currentTime)
     }
@@ -2458,6 +2469,9 @@ final class PlayerService {
         // Save the full duration as watched time when video completes
         dataManager.updateWatchProgressLocal(for: video, seconds: completedDuration, duration: completedDuration)
 
+        // Mark watched on the Invidious account.
+        invidiousHistorySync?.markWatched(videoID: video.id.videoID)
+
         // Update Handoff activity with completed time
         handoffManager?.updatePlaybackTime(completedDuration)
     }
@@ -2473,6 +2487,10 @@ final class PlayerService {
 
         // Save and queue for iCloud sync (used when video closes/switches)
         dataManager.updateWatchProgress(for: video, seconds: state.currentTime, duration: state.duration)
+
+        // Push the final position to the Invidious account (force past debounce).
+        invidiousHistorySync?.pushPosition(videoID: video.id.videoID, seconds: state.currentTime, force: true)
+
         NotificationCenter.default.post(name: .watchHistoryDidChange, object: nil)
     }
 
