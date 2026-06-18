@@ -754,6 +754,10 @@ extension DownloadManager {
 
         saveDownloadsImmediately()
 
+        // FORK (offline-sponsorblock): fetch + persist SponsorBlock segments in the
+        // background so sponsor skipping works offline, without delaying completion.
+        captureAndStoreSponsorSegments(for: download.id, videoID: download.videoID)
+
         await calculateStorageUsed()
         await startNextDownloadIfNeeded()
     }

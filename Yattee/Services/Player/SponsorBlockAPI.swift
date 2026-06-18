@@ -17,7 +17,9 @@ enum SponsorBlockActionType: String, Codable, Sendable {
 }
 
 /// A segment from SponsorBlock.
-struct SponsorBlockSegment: Codable, Identifiable, Sendable {
+// FORK (offline-sponsorblock): `Equatable` is required so `Download` (which now
+// stores `[SponsorBlockSegment]?` for offline use) keeps its synthesized Equatable.
+struct SponsorBlockSegment: Codable, Identifiable, Sendable, Equatable {
     let uuid: String
     let category: SponsorBlockCategory
     let actionType: SponsorBlockActionType

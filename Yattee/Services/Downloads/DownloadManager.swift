@@ -87,6 +87,12 @@ final class DownloadManager: NSObject {
     weak var toastManager: ToastManager?
     weak var downloadSettings: DownloadSettings?
 
+    // FORK (offline-sponsorblock): dependencies for capturing SponsorBlock
+    // segments at download time. Injected from AppEnvironment via
+    // setSponsorBlockDependencies(api:settingsManager:).
+    weak var sponsorBlockSettings: SettingsManager?
+    var sponsorBlockAPI: SponsorBlockAPI?
+
     /// Debounced save task to prevent excessive JSON encoding
     var saveTask: Task<Void, Never>?
 
@@ -141,6 +147,13 @@ final class DownloadManager: NSObject {
 
     func setToastManager(_ manager: ToastManager) {
         self.toastManager = manager
+    }
+
+    /// FORK (offline-sponsorblock): wires the SponsorBlock client + settings used
+    /// to capture segments when a download completes (see DownloadManager+OfflineSponsorBlock).
+    func setSponsorBlockDependencies(api: SponsorBlockAPI, settingsManager: SettingsManager) {
+        self.sponsorBlockAPI = api
+        self.sponsorBlockSettings = settingsManager
     }
 
     func setDownloadSettings(_ settings: DownloadSettings) {
@@ -1207,6 +1220,7 @@ final class DownloadManager {
     func videoAndStream(for videoID: VideoID) -> (video: Video, stream: Stream, audioStream: Stream?, captionURL: URL?, dislikeCount: Int?)? { nil }
     func setToastManager(_ manager: ToastManager) {}
     func setDownloadSettings(_ settings: DownloadSettings) {}
+    func setSponsorBlockDependencies(api: SponsorBlockAPI, settingsManager: SettingsManager) {} // FORK (offline-sponsorblock)
     func downloadsDirectory() -> URL { URL(fileURLWithPath: NSTemporaryDirectory()) }
 }
 #endif

@@ -40,6 +40,12 @@ struct Download: Identifiable, Codable, Sendable, Equatable {
     let httpHeaders: [String: String]?
     /// Storyboard metadata for offline seek preview
     let storyboard: Storyboard?
+    /// FORK (offline-sponsorblock): SponsorBlock segments captured at download
+    /// time so sponsor skipping works while offline. `nil` when SponsorBlock was
+    /// disabled at download time, the video isn't a YouTube video, or the fetch
+    /// failed. All categories are stored; the player filters by the user's
+    /// enabled categories at playback time.
+    var sponsorSegments: [SponsorBlockSegment]?
 
     var status: DownloadStatus
     var progress: Double
@@ -153,6 +159,7 @@ struct Download: Identifiable, Codable, Sendable, Equatable {
         case retryCount, warnings, downloadPhase, videoProgress, audioProgress, videoTotalBytes, audioTotalBytes
         case videoCodec, audioCodec, videoBitrate, audioBitrate
         case storyboardProgress, storyboardTotalBytes
+        case sponsorSegments // FORK (offline-sponsorblock)
     }
 
     // Custom decoder for backwards compatibility with downloads saved before 'warnings' was added
@@ -221,6 +228,9 @@ struct Download: Identifiable, Codable, Sendable, Equatable {
         // Backwards compatibility: storyboard progress fields were added later
         storyboardProgress = try container.decodeIfPresent(Double.self, forKey: .storyboardProgress) ?? 0
         storyboardTotalBytes = try container.decodeIfPresent(Int64.self, forKey: .storyboardTotalBytes) ?? 0
+
+        // FORK (offline-sponsorblock): added later; older downloads decode as nil.
+        sponsorSegments = try container.decodeIfPresent([SponsorBlockSegment].self, forKey: .sponsorSegments)
     }
 
     init(
@@ -265,6 +275,7 @@ struct Download: Identifiable, Codable, Sendable, Equatable {
         self.captionLanguage = captionLanguage
         self.httpHeaders = httpHeaders
         self.storyboard = storyboard
+        self.sponsorSegments = nil // FORK (offline-sponsorblock): captured on completion
 
         self.status = .queued
         self.progress = 0

@@ -287,6 +287,24 @@ final class PlayerService {
                     state.storyboards = [localStoryboard]
                     LoggingService.shared.logPlayer("Loaded local storyboard for \(video.id.id)")
                 }
+
+                // FORK (offline-sponsorblock): for downloaded videos the early
+                // online fetch above is skipped (stream != nil), so load the
+                // SponsorBlock segments captured at download time. Skip logic
+                // (checkSponsorBlockSegments) filters by enabled categories at
+                // playback time. Fall back to an online fetch when a download has
+                // no captured segments (older download / disabled at download
+                // time) — best-effort, a no-op when offline.
+                if let downloadManager,
+                   let download = downloadManager.download(for: video.id),
+                   let segments = download.sponsorSegments, !segments.isEmpty {
+                    state.sponsorSegments = segments
+                    LoggingService.shared.logPlayer("Loaded \(segments.count) offline SponsorBlock segments for \(video.id.id)")
+                } else if case .global = video.id.source, settingsManager?.sponsorBlockEnabled == true {
+                    sponsorBlockTask = Task {
+                        await fetchSponsorBlockSegments(for: video.id.videoID)
+                    }
+                }
             } else {
                 // Mark that we're loading video details from API
                 state.videoDetailsState = .loading

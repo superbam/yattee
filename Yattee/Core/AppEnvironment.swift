@@ -249,6 +249,12 @@ final class AppEnvironment {
         remoteControl.setToastManager(toast)
         self.downloadManager.setToastManager(toast)
         self.downloadManager.setDownloadSettings(self.downloadSettings)
+        // FORK (offline-sponsorblock): let the download manager capture SponsorBlock
+        // segments at download time so sponsor skipping works offline.
+        self.downloadManager.setSponsorBlockDependencies(
+            api: SponsorBlockAPI(httpClient: client),
+            settingsManager: settings
+        )
 
         // Initialize Handoff Manager
         let handoff = HandoffManager()
