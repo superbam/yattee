@@ -4,7 +4,7 @@ import Foundation
 enum AppIdentifiers {
     // MARK: - Base Identifier
 
-    static let bundleIdentifier = "com.brettmiller.yattee"
+    static let bundleIdentifier = "com.bammcm.yattee"
 
     // MARK: - iCloud
 
