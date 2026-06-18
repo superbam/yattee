@@ -32,6 +32,7 @@ struct SubscriptionsView: View {
     @AppStorage("subscriptionsRowStyle") private var rowStyle: VideoRowStyle = .regular
     @AppStorage("subscriptionsGridColumns") private var gridColumns = 2
     @AppStorage("subscriptionsHideWatched") private var hideWatched = false
+    @AppStorage("subscriptionsVideoKind") private var videoKind: FeedVideoKind = .all
     @AppStorage("subscriptionsChannelStripSize") private var channelStripSize: ChannelStripSize = .normal
     @AppStorage("subscriptionsShowSidebar") private var showSidebar = true
     #if os(macOS)
@@ -98,7 +99,30 @@ struct SubscriptionsView: View {
             }
         }
 
-        return videos.filteringShorts(appEnvironment?.settingsManager.hideShorts ?? false)
+        // Global Hide Shorts wins; otherwise apply the feed's Videos/Shorts/All selector.
+        if appEnvironment?.settingsManager.hideShorts ?? false {
+            return videos.filter { !$0.isShort }
+        }
+        switch videoKind {
+        case .all: return videos
+        case .videos: return videos.filter { !$0.isShort }
+        case .shorts: return videos.filter { $0.isShort }
+        }
+    }
+
+    /// Segmented Videos/Shorts/All selector for the feed. Hidden when Shorts are
+    /// globally hidden (the Hide Shorts setting takes over). Matches the Channel
+    /// view's content-type picker styling.
+    @ViewBuilder
+    private var videoKindPicker: some View {
+        if !(appEnvironment?.settingsManager.hideShorts ?? false) {
+            Picker("", selection: $videoKind) {
+                ForEach(FeedVideoKind.allCases) { kind in
+                    Text(kind.title).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
     }
 
     /// The currently selected subscription (if any).
@@ -504,6 +528,10 @@ struct SubscriptionsView: View {
             #if !os(tvOS)
             sectionHeaderView
             #endif
+
+            videoKindPicker
+                .padding(.horizontal, listStyle == .inset ? 32 : 16)
+                .padding(.bottom, 8)
         } content: {
             feedContentRows
         } footer: {
@@ -620,6 +648,10 @@ struct SubscriptionsView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 12)
                 #endif
+
+                videoKindPicker
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
 
                 // Content
                 if case .error(let feedError) = feedCache.feedLoadState, feedCache.videos.isEmpty {

@@ -45,6 +45,7 @@ struct SearchView: View {
     @AppStorage("searchRowStyle") private var rowStyle: VideoRowStyle = .regular
     @AppStorage("searchGridColumns") private var gridColumns = 2
     @AppStorage("searchHideWatched") private var hideWatched = false
+    @AppStorage("searchVideoKind") private var videoKind: FeedVideoKind = .all
 
     /// List style from centralized settings.
     private var listStyle: VideoListStyle {
@@ -425,27 +426,31 @@ struct SearchView: View {
 
     #if !os(tvOS)
     private var searchFiltersStrip: some View {
-        HStack(spacing: 12) {
-            // Filter button
-            Button {
-                showFilterSheet = true
-            } label: {
-                Image(systemName: (searchViewModel?.filters.isDefault ?? true)
-                    ? "line.3.horizontal.decrease.circle"
-                    : "line.3.horizontal.decrease.circle.fill")
-                    .font(.title2)
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                // Filter button
+                Button {
+                    showFilterSheet = true
+                } label: {
+                    Image(systemName: (searchViewModel?.filters.isDefault ?? true)
+                        ? "line.3.horizontal.decrease.circle"
+                        : "line.3.horizontal.decrease.circle.fill")
+                        .font(.title2)
+                }
+
+                // Content type segmented picker
+                Picker("", selection: Binding(
+                    get: { searchViewModel?.filters.type ?? .video },
+                    set: { searchViewModel?.filters.type = $0 }
+                )) {
+                    ForEach(SearchContentType.allCases) { type in
+                        Text(type.title).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
             }
 
-            // Content type segmented picker
-            Picker("", selection: Binding(
-                get: { searchViewModel?.filters.type ?? .video },
-                set: { searchViewModel?.filters.type = $0 }
-            )) {
-                ForEach(SearchContentType.allCases) { type in
-                    Text(type.title).tag(type)
-                }
-            }
-            .pickerStyle(.segmented)
+            videoKindPicker
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -456,6 +461,21 @@ struct SearchView: View {
             Task {
                 await searchViewModel?.search(query: searchTextBinding.wrappedValue)
             }
+        }
+    }
+
+    /// Segmented Videos/Shorts/All selector for video results. Shown only when
+    /// Shorts aren't globally hidden and the current results include videos.
+    @ViewBuilder
+    private var videoKindPicker: some View {
+        let type = searchViewModel?.filters.type ?? .video
+        if !(appEnvironment?.settingsManager.hideShorts ?? false), type == .video || type == .all {
+            Picker("", selection: $videoKind) {
+                ForEach(FeedVideoKind.allCases) { kind in
+                    Text(kind.title).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
         }
     }
     #endif
@@ -900,11 +920,16 @@ struct SearchView: View {
     private var unifiedResults: [SearchResultItem] {
         guard let vm = searchViewModel else { return [] }
 
-        // Drop Short videos when the user has opted to hide them.
+        // Filter videos by the Hide Shorts setting (wins) or the Videos/Shorts/All selector.
         let hideShorts = appEnvironment?.settingsManager.hideShorts ?? false
         func keep(_ item: SearchResultItem) -> Bool {
-            if hideShorts, case let .video(video, _) = item { return !video.isShort }
-            return true
+            guard case let .video(video, _) = item else { return true }
+            if hideShorts { return !video.isShort }
+            switch videoKind {
+            case .all: return true
+            case .videos: return !video.isShort
+            case .shorts: return video.isShort
+            }
         }
 
         // For .all type, use resultItems which preserves API order
