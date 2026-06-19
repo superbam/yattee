@@ -383,9 +383,17 @@ final class PlayerService {
             // one hydrated as "finished" with watchedSeconds 0 because Invidious
             // marked the video watched on open. A truly-finished video's synced
             // position sits past completionThreshold below, so it still replays.
+            // For online videos, block briefly to fetch the freshest server
+            // position so resume reflects another device on the very first open.
+            let syncedPosition: TimeInterval?
+            if case .global = video.id.source {
+                syncedPosition = await invidiousHistorySync?.freshPosition(for: video.id.videoID)
+            } else {
+                syncedPosition = nil
+            }
             let savedProgress = [
                 dataManager.watchProgress(for: video.id.videoID),
-                invidiousHistorySync?.cachedPosition(for: video.id.videoID)
+                syncedPosition
             ].compactMap { $0 }.max()
             LoggingService.shared.logPlayer("Replay check: savedProgress=\(savedProgress ?? -1), startTime=\(startTime ?? -1), duration=\(video.duration), threshold=\(completionThreshold)")
 

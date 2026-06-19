@@ -280,4 +280,36 @@ final class InvidiousHistorySyncService {
         guard enabled else { return nil }
         return serverPositions[videoID]
     }
+
+    /// Blocking lookup for the load path: fetches the freshest server position
+    /// for one video so first-open resume reflects another device immediately,
+    /// rather than waiting for the next background pull. Prefers the lightweight
+    /// single-video endpoint; falls back to a full positions pull on instances
+    /// that lack it, and to the cached value if the network fails entirely.
+    /// Updates the cache so the badge/list paths see the fresh value too.
+    func freshPosition(for videoID: String) async -> TimeInterval? {
+        guard enabled, let (instance, sid) = authenticatedInstance("freshPosition") else {
+            return serverPositions[videoID]
+        }
+        do {
+            let seconds = try await invidiousAPI.playbackPosition(videoID: videoID, instance: instance, sid: sid)
+            serverPositions[videoID] = seconds
+            return seconds
+        } catch APIError.httpError(404, _) {
+            // Single-video endpoint missing (older instance, before redeploy) —
+            // fall back to the bulk pull once. The instance answered the 404
+            // quickly, so this won't add the single-fetch timeout on top.
+            do {
+                let positions = try await invidiousAPI.playbackPositions(instance: instance, sid: sid)
+                serverPositions = positions
+                return positions[videoID]
+            } catch {
+                return serverPositions[videoID]
+            }
+        } catch {
+            // Timeout / network / other — don't pile on another request; load
+            // the video now using the last cached position.
+            return serverPositions[videoID]
+        }
+    }
 }

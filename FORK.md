@@ -18,8 +18,11 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
    and resume position (the `shorts-filter` fork's `/api/v1/auth/positions`) sync
    with the signed-in Invidious account. Independent of the existing iCloud sync.
    Two-way: pushes during/after playback; pulls on launch, on each
-   foreground, on a 300s foreground timer, on video load (throttled, non-
-   blocking), and during OS background refresh (iOS `BGAppRefreshTask` / macOS
+   foreground, on a 300s foreground timer, and during OS background refresh.
+   On opening an online video it also does a blocking single-video position
+   fetch (`/api/v1/auth/positions/:id`, bulk-pull fallback for older
+   instances) so first-open resume reflects another device; OS background
+   refresh covers the background case (iOS `BGAppRefreshTask` / macOS
    `NSBackgroundActivityScheduler`) — the iOS task is scheduled whenever sync is
    on, independent of the notifications setting. On pull, account-watched videos
    with no local entry are hydrated into full History rows (metadata fetched
@@ -51,7 +54,7 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
 | File | Change | Tag |
 |------|--------|-----|
 | `Yattee/Models/Video.swift` | `isShort: Bool` property + init param/assignment | — |
-| `Yattee/Services/API/InvidiousAPI.swift` | `isShort` in `InvidiousVideo`/`InvidiousRecommendedVideo` `toVideo`; 6 history/position methods (must stay — `httpClient` is file-private) | `FORK` |
+| `Yattee/Services/API/InvidiousAPI.swift` | `isShort` in `InvidiousVideo`/`InvidiousRecommendedVideo` `toVideo`; 7 history/position methods (must stay — `httpClient` is file-private) | `FORK` |
 | `Yattee/Services/API/PipedAPI.swift` | thread `isShort` into two `toVideo` builders | — |
 | `Yattee/Core/SettingsManager.swift` | two backing `_` stored vars (must stay — stored props can't be in extensions) | `FORK` |
 | `Yattee/Services/Player/PlayerService.swift` | `invidiousHistorySync` property + setter; push in `saveProgress`/`saveProgressAndSync`, `markWatched` in `saveProgressAsCompleted`, resume fallback + load-time `syncIfDue()` refresh in `play()`; **offline-sponsorblock**: load persisted segments (+ online fallback) in the downloaded-stream branch of `play()` | `FORK` |

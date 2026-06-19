@@ -597,6 +597,25 @@ actor InvidiousAPI: InstanceAPI {
         return (try? JSONDecoder().decode([String: Double].self, from: data)) ?? [:]
     }
 
+    /// Returns the saved resume position for a single video, or nil if none.
+    /// Lighter than `playbackPositions` for the load path. Throws if the
+    /// endpoint is missing (older instances) so callers can fall back to the
+    /// bulk pull. Response shape: `{ "position": <seconds|null> }`.
+    ///
+    /// Uses a short 3s timeout (vs the default 30s): this blocks the playback
+    /// path, so a slow/unreachable instance must not stall video loading — the
+    /// caller falls back to the cached position when it times out.
+    func playbackPosition(videoID: String, instance: Instance, sid: String) async throws -> Double? {
+        let endpoint = GenericEndpoint(path: "/api/v1/auth/positions/\(videoID)", timeout: 3)
+        let data = try await httpClient.fetchData(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+        struct PositionResponse: Decodable { let position: Double? }
+        return (try? JSONDecoder().decode(PositionResponse.self, from: data))?.position
+    }
+
     func setPlaybackPosition(videoID: String, seconds: Double, instance: Instance, sid: String) async throws {
         let endpoint = GenericEndpoint(
             path: "/api/v1/auth/positions/\(videoID)",
