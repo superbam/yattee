@@ -376,10 +376,17 @@ final class PlayerService {
             // Use state.duration as fallback for quality switching when video.duration might be 0
             let effectiveDuration = video.duration > 0 ? video.duration : state.duration
             let completionThreshold = effectiveDuration * 0.9
-            // FORK (playback-sync): fall back to a position synced from the
-            // Invidious account when there's no local history (first time on this device).
-            let savedProgress = dataManager.watchProgress(for: video.id.videoID)
-                ?? invidiousHistorySync?.cachedPosition(for: video.id.videoID)
+            // FORK (playback-sync): resume from the furthest of local progress
+            // and the position synced from the Invidious account. Using max()
+            // (not a local-first `??`) is what lets a position set on another
+            // device win even when this device already has a WatchEntry — e.g.
+            // one hydrated as "finished" with watchedSeconds 0 because Invidious
+            // marked the video watched on open. A truly-finished video's synced
+            // position sits past completionThreshold below, so it still replays.
+            let savedProgress = [
+                dataManager.watchProgress(for: video.id.videoID),
+                invidiousHistorySync?.cachedPosition(for: video.id.videoID)
+            ].compactMap { $0 }.max()
             LoggingService.shared.logPlayer("Replay check: savedProgress=\(savedProgress ?? -1), startTime=\(startTime ?? -1), duration=\(video.duration), threshold=\(completionThreshold)")
 
             if let startTime {
