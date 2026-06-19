@@ -656,73 +656,25 @@ extension InvidiousAPI {
         return host.hasSuffix("googlevideo.com") || host.hasSuffix("youtube.com")
     }
 
-    /// Detects whether direct access to a YouTube CDN URL is blocked (HTTP 403).
-    /// Used for auto-detecting when ISPs block direct YouTube CDN access.
-    ///
-    /// Uses a 1-byte ranged GET rather than HEAD: googlevideo frequently rejects
-    /// HEAD with 403 even when a normal GET plays fine, which produced false-
-    /// positive proxy detection (the app would route a working CDN through the
-    /// instance and fail). A ranged GET mirrors what playback actually does, so
-    /// a 403 here is a reliable signal. We read only the response headers and
-    /// cancel before pulling the body.
-    static func isForbidden(_ url: URL) async -> Bool {
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
-        request.timeoutInterval = 5
-
-        do {
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
-            bytes.task.cancel() // headers are in; don't download the body
-            if let httpResponse = response as? HTTPURLResponse {
-                return httpResponse.statusCode == 403
-            }
-        } catch {
-            // Network errors are not 403 — don't proxy on timeout or other failures
-        }
-        return false
-    }
-
-    /// Applies proxy URL rewriting to an array of streams if needed.
+    /// Applies proxy URL rewriting to an array of streams when the instance's
+    /// "Proxy videos" setting is on. The toggle is authoritative: off = always
+    /// play direct, on = always route YouTube CDN URLs through the instance.
+    /// There is no speculative auto-detection — a probe that guessed wrong would
+    /// silently route working direct streams through the instance (and break
+    /// playback when the instance's proxy can't serve them). If direct CDN
+    /// access is blocked on a network, the user turns this on.
     /// - Parameters:
     ///   - streams: The original streams from the API
     ///   - instance: The instance to proxy through
-    /// - Returns: Streams with YouTube CDN URLs rewritten to go through the instance
-    static func proxyStreamsIfNeeded(_ streams: [Stream], instance: Instance) async -> [Stream] {
-        guard instance.supportsVideoProxying else { return streams }
+    /// - Returns: Streams with YouTube CDN URLs rewritten when proxying is enabled
+    static func proxyStreamsIfNeeded(_ streams: [Stream], instance: Instance) -> [Stream] {
+        guard instance.supportsVideoProxying, instance.proxiesVideos else { return streams }
         // Yattee Server does proxying server-side via the ?proxy=true query
         // on the videos endpoint (the converter mints signed /proxy/relay
         // URLs). Don't second-guess that here by host-rewriting CDN URLs.
         if instance.type == .yatteeServer { return streams }
 
-        let firstCDNURL = streams.first(where: { isYouTubeCDNURL($0.url) })?.url
-
-        let shouldProxy: Bool
-        if instance.proxiesVideos {
-            shouldProxy = true
-            LoggingService.shared.info("Proxying streams through \(instance.displayName) (user-enabled)", category: .player)
-        } else if let cdnURL = firstCDNURL {
-            // Auto-detect via cached HEAD probe. Cache cuts videos 2..N down
-            // to a synchronous lookup; on the first miss we pay the HEAD once.
-            shouldProxy = await ProxyDetectionCache.shared.decision(
-                for: instance,
-                sampleURL: cdnURL,
-                probe: { await isForbidden($0) }
-            )
-            if shouldProxy {
-                LoggingService.shared.info("Proxying streams through \(instance.displayName) (auto-detected 403)", category: .player)
-            }
-        } else {
-            shouldProxy = false
-        }
-
-        // Even when we don't end up proxying, remember a sample CDN URL so
-        // future videos can prewarm the probe before their API call returns.
-        if !shouldProxy, let cdnURL = firstCDNURL {
-            await ProxyDetectionCache.shared.record(decision: false, sampleURL: cdnURL, for: instance)
-        }
-
-        guard shouldProxy else { return streams }
+        LoggingService.shared.info("Proxying streams through \(instance.displayName) (user-enabled)", category: .player)
 
         return streams.map { stream in
             if isYouTubeCDNURL(stream.url) {
@@ -730,21 +682,6 @@ extension InvidiousAPI {
             }
             return stream
         }
-    }
-
-    /// Kick off proxy auto-detection in the background using a previously-seen
-    /// CDN URL for this instance. Cheap when there's nothing to do (no sample
-    /// URL yet, or the decision is already cached). Call this when the player
-    /// starts loading so the verdict is ready by the time streams come back.
-    static func prewarmProxyDetection(for instance: Instance) async {
-        guard instance.supportsVideoProxying,
-              instance.type != .yatteeServer,
-              !instance.proxiesVideos else { return }
-
-        await ProxyDetectionCache.shared.prewarm(
-            instance: instance,
-            probe: { await isForbidden($0) }
-        )
     }
 }
 

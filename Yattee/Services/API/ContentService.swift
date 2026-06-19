@@ -251,7 +251,7 @@ actor ContentService: ContentServiceProtocol {
                 .proxyStreams(videoID: videoID, instance: instance, mode: .download)
         }
         let fetchedStreams = try await streams(videoID: videoID, instance: instance)
-        return await InvidiousAPI.proxyStreamsIfNeeded(fetchedStreams, instance: instance)
+        return InvidiousAPI.proxyStreamsIfNeeded(fetchedStreams, instance: instance)
     }
 
     /// Fetches video details + streams for downloads. For Yattee Server this routes
@@ -262,7 +262,7 @@ actor ContentService: ContentServiceProtocol {
                 .videoWithProxyStreamsAndCaptionsAndStoryboards(id: id, instance: instance, mode: .download)
         }
         var result = try await videoWithStreamsAndCaptionsAndStoryboards(id: id, instance: instance)
-        result.streams = await InvidiousAPI.proxyStreamsIfNeeded(result.streams, instance: instance)
+        result.streams = InvidiousAPI.proxyStreamsIfNeeded(result.streams, instance: instance)
         return result
     }
 

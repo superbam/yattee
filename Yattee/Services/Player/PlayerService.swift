@@ -1779,12 +1779,6 @@ final class PlayerService {
             return (result.video, result.streams, result.captions, [])
         }
 
-        // Race the proxy-detection HEAD against the video API call so the
-        // verdict is (usually) ready by the time streams come back. Cheap
-        // when there's nothing to do — it returns immediately if the
-        // verdict is already cached, or if no prior CDN sample exists.
-        async let _: Void = InvidiousAPI.prewarmProxyDetection(for: instance)
-
         // Fetch full video details, streams, captions, and storyboards in a single API call
         // (for Invidious, this is a single request; for other backends, calls are made in parallel)
         let result = try await contentService.videoWithStreamsAndCaptionsAndStoryboards(id: video.id.videoID, instance: instance)
@@ -1792,8 +1786,8 @@ final class PlayerService {
         // Store original (unproxied) streams so we can re-apply proxy when settings change
         self.originalStreams = result.streams
 
-        // Apply proxy URL rewriting for instances that support it
-        let streams = await InvidiousAPI.proxyStreamsIfNeeded(result.streams, instance: instance)
+        // Apply proxy URL rewriting when the instance's "Proxy videos" toggle is on
+        let streams = InvidiousAPI.proxyStreamsIfNeeded(result.streams, instance: instance)
 
         return (result.video, streams, result.captions, result.storyboards)
     }
@@ -1805,7 +1799,7 @@ final class PlayerService {
               let video = state.currentVideo,
               let instance = try? await findInstance(for: video) else { return }
 
-        let newStreams = await InvidiousAPI.proxyStreamsIfNeeded(originalStreams, instance: instance)
+        let newStreams = InvidiousAPI.proxyStreamsIfNeeded(originalStreams, instance: instance)
 
         // Update available streams (preserve any downloaded/local file streams)
         let downloadedStreams = availableStreams.filter { $0.url.isFileURL }
