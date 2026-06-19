@@ -253,11 +253,17 @@ struct YatteeApp: App {
 
                 // Start periodic polling as fallback for missed push notifications
                 appEnvironment.cloudKitSync.startForegroundPolling()
+
+                // Keep Invidious watch history / positions in sync: pull now
+                // (throttled) and on a periodic timer while foregrounded.
+                Task { await appEnvironment.invidiousHistorySync.syncIfDue() }
+                appEnvironment.invidiousHistorySync.startPeriodicSync()
             }
 
             // Flush pending CloudKit changes when entering background
             if newPhase == .background {
                 appEnvironment.cloudKitSync.stopForegroundPolling()
+                appEnvironment.invidiousHistorySync.stopPeriodicSync()
                 Task {
                     await appEnvironment.cloudKitSync.flushPendingChanges()
                 }
@@ -301,11 +307,17 @@ struct YatteeApp: App {
 
                 // Start periodic polling as fallback for missed push notifications
                 appEnvironment.cloudKitSync.startForegroundPolling()
+
+                // Keep Invidious watch history / positions in sync: pull now
+                // (throttled) and on a periodic timer while foregrounded.
+                Task { await appEnvironment.invidiousHistorySync.syncIfDue() }
+                appEnvironment.invidiousHistorySync.startPeriodicSync()
             }
 
             // Flush pending CloudKit changes when entering background
             if newPhase == .background {
                 appEnvironment.cloudKitSync.stopForegroundPolling()
+                appEnvironment.invidiousHistorySync.stopPeriodicSync()
                 Task {
                     await appEnvironment.cloudKitSync.flushPendingChanges()
                 }

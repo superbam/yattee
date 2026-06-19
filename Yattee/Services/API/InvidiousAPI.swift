@@ -628,6 +628,21 @@ extension InvidiousAPI {
     static func proxiedURL(instance: Instance, originalURL: URL) -> URL {
         var components = URLComponents(url: originalURL, resolvingAgainstBaseURL: true) ?? URLComponents()
         let instanceComponents = URLComponents(url: instance.url, resolvingAgainstBaseURL: true)
+
+        // Invidious's /videoplayback proxy needs the upstream googlevideo host in
+        // a `host` query param to know where to fetch from. The raw CDN URL carries
+        // it only in the URL host — which we're about to overwrite with the
+        // instance's host — so preserve it as a query item first. Without this the
+        // instance receives a videoplayback request with no upstream and fails to
+        // open the stream.
+        if let originalHost = components.host {
+            var queryItems = components.queryItems ?? []
+            if !queryItems.contains(where: { $0.name == "host" }) {
+                queryItems.append(URLQueryItem(name: "host", value: originalHost))
+                components.queryItems = queryItems
+            }
+        }
+
         components.scheme = instanceComponents?.scheme ?? "https"
         components.host = instanceComponents?.host
         components.port = instanceComponents?.port
@@ -641,15 +656,24 @@ extension InvidiousAPI {
         return host.hasSuffix("googlevideo.com") || host.hasSuffix("youtube.com")
     }
 
-    /// Performs a HEAD request to detect if a URL returns HTTP 403 (Forbidden).
+    /// Detects whether direct access to a YouTube CDN URL is blocked (HTTP 403).
     /// Used for auto-detecting when ISPs block direct YouTube CDN access.
+    ///
+    /// Uses a 1-byte ranged GET rather than HEAD: googlevideo frequently rejects
+    /// HEAD with 403 even when a normal GET plays fine, which produced false-
+    /// positive proxy detection (the app would route a working CDN through the
+    /// instance and fail). A ranged GET mirrors what playback actually does, so
+    /// a 403 here is a reliable signal. We read only the response headers and
+    /// cancel before pulling the body.
     static func isForbidden(_ url: URL) async -> Bool {
         var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
+        request.httpMethod = "GET"
+        request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
         request.timeoutInterval = 5
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            bytes.task.cancel() // headers are in; don't download the body
             if let httpResponse = response as? HTTPURLResponse {
                 return httpResponse.statusCode == 403
             }

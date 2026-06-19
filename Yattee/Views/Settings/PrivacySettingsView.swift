@@ -66,6 +66,18 @@ struct PrivacySettingsView: View {
                         isOn: Bindable(settingsManager).syncWatchHistoryWithInvidiousAccount
                     )
                     .disabled(!settingsManager.saveWatchHistory)
+                    .onChange(of: settingsManager.syncWatchHistoryWithInvidiousAccount) { _, isOn in
+                        guard let historySync = appEnvironment?.invidiousHistorySync else { return }
+                        if isOn {
+                            // Pull immediately so the account's state appears
+                            // without waiting for the next foreground/timer tick,
+                            // then keep it fresh periodically.
+                            Task { await historySync.sync() }
+                            historySync.startPeriodicSync()
+                        } else {
+                            historySync.stopPeriodicSync()
+                        }
+                    }
                 }
 
                 PlatformMenuPicker(
