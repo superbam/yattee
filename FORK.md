@@ -21,7 +21,9 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
    foreground, on a 300s foreground timer, on video load (throttled, non-
    blocking), and during OS background refresh (iOS `BGAppRefreshTask` / macOS
    `NSBackgroundActivityScheduler`) — the iOS task is scheduled whenever sync is
-   on, independent of the notifications setting.
+   on, independent of the notifications setting. On pull, account-watched videos
+   with no local entry are hydrated into full History rows (metadata fetched
+   from the instance, bounded concurrency, failures retried next sync).
 3. **Bundle-ID rebrand** — `stream.yattee.app` → `com.bammcm.yattee` for signing,
    plus `icloud-container-environment = Production` for TestFlight.
 4. **Offline SponsorBlock** (iOS/macOS) — when a video is downloaded, its
@@ -34,7 +36,8 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
 ## New files (fork-owned, conflict-free)
 
 - `Yattee/Services/InvidiousHistorySyncService.swift` — push/pull coordinator.
-- `Yattee/Data/DataManager+InvidiousHistorySync.swift` — `markFinishedFromSync`.
+- `Yattee/Data/DataManager+InvidiousHistorySync.swift` — `markFinishedFromSync`,
+  `videoIDsWithoutWatchEntry`, `createFinishedEntriesFromSync` (hydration).
 - `Yattee/Core/Settings/SettingsManager+ShortsSync.swift` — `hideShorts`,
   `syncWatchHistoryWithInvidiousAccount` accessors &
   `backgroundRefreshShouldBeScheduled` (notifications-or-sync gate).

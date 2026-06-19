@@ -219,6 +219,58 @@ final class InvidiousHistorySyncService {
             "Invidious history sync: \(watched.count) watched, \(positions.count) positions from \(instance.url.absoluteString)",
             category: .api
         )
+        // Seed full history rows for account-watched videos this device has
+        // never seen, so they appear in History (not just as watched badges).
+        await hydrateWatchedEntries(watchedIDs: watched, instance: instance)
+    }
+
+    // MARK: - Watched-entry hydration
+
+    /// Bounded concurrency for the one-time metadata backfill, so a large first
+    /// sync doesn't hammer the instance.
+    private let maxHydrationConcurrency = 4
+    /// Cap per sync run — a safety valve against a runaway account; the rest is
+    /// picked up on the next sync since the IDs still lack a local entry.
+    private let maxHydrationPerSync = 300
+
+    /// Fetches metadata for account-watched videos that have no local
+    /// WatchEntry and creates finished history rows for them. Failures (e.g. a
+    /// video the instance can't resolve) are skipped and retried on the next
+    /// sync. Steady state is a no-op once every watched video has a local row.
+    private func hydrateWatchedEntries(watchedIDs: [String], instance: Instance) async {
+        let missing = dataManager.videoIDsWithoutWatchEntry(among: watchedIDs)
+        guard !missing.isEmpty else { return }
+        let toFetch = Array(missing.prefix(maxHydrationPerSync))
+        LoggingService.shared.info(
+            "Invidious history sync: hydrating \(toFetch.count) watched videos missing locally",
+            category: .api
+        )
+
+        var fetched: [Video] = []
+        var index = 0
+        while index < toFetch.count {
+            let end = min(index + maxHydrationConcurrency, toFetch.count)
+            let batch = Array(toFetch[index..<end])
+            index = end
+            await withTaskGroup(of: Video?.self) { group in
+                for id in batch {
+                    let api = invidiousAPI
+                    group.addTask {
+                        try? await api.video(id: id, instance: instance)
+                    }
+                }
+                for await video in group {
+                    if let video { fetched.append(video) }
+                }
+            }
+        }
+
+        dataManager.createFinishedEntriesFromSync(videos: fetched)
+        LoggingService.shared.info(
+            "Invidious history sync: created \(fetched.count) watched history rows from metadata " +
+                "(\(toFetch.count - fetched.count) failed, will retry next sync)",
+            category: .api
+        )
     }
 
     // MARK: - Resume fallback
