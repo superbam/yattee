@@ -36,6 +36,13 @@ final class BackgroundFeedRefresher {
             return
         }
 
+        // FORK (playback-sync): sync Invidious watch history / positions during
+        // OS background refresh, independent of the notifications gate below.
+        // sync() no-ops (and logs why) when the sync setting is off or the
+        // account isn't a signed-in Invidious instance, so calling it
+        // unconditionally is safe and cheap.
+        await appEnvironment.invidiousHistorySync.sync()
+
         guard appEnvironment.settingsManager.backgroundNotificationsEnabled else {
             LoggingService.shared.debug("Background refresh disabled in settings", category: .notifications)
             return

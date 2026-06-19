@@ -17,6 +17,11 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
 2. **Invidious account playback sync** — watched state (`/api/v1/auth/history`)
    and resume position (the `shorts-filter` fork's `/api/v1/auth/positions`) sync
    with the signed-in Invidious account. Independent of the existing iCloud sync.
+   Two-way: pushes during/after playback; pulls on launch, on each
+   foreground, on a 300s foreground timer, on video load (throttled, non-
+   blocking), and during OS background refresh (iOS `BGAppRefreshTask` / macOS
+   `NSBackgroundActivityScheduler`) — the iOS task is scheduled whenever sync is
+   on, independent of the notifications setting.
 3. **Bundle-ID rebrand** — `stream.yattee.app` → `com.bammcm.yattee` for signing,
    plus `icloud-container-environment = Production` for TestFlight.
 4. **Offline SponsorBlock** (iOS/macOS) — when a video is downloaded, its
@@ -30,8 +35,9 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
 
 - `Yattee/Services/InvidiousHistorySyncService.swift` — push/pull coordinator.
 - `Yattee/Data/DataManager+InvidiousHistorySync.swift` — `markFinishedFromSync`.
-- `Yattee/Core/Settings/SettingsManager+ShortsSync.swift` — `hideShorts` &
-  `syncWatchHistoryWithInvidiousAccount` accessors.
+- `Yattee/Core/Settings/SettingsManager+ShortsSync.swift` — `hideShorts`,
+  `syncWatchHistoryWithInvidiousAccount` accessors &
+  `backgroundRefreshShouldBeScheduled` (notifications-or-sync gate).
 - `Yattee/Models/Navigation/FeedVideoKind.swift` — All/Videos/Shorts enum.
 - `Yattee/Services/Downloads/DownloadManager+OfflineSponsorBlock.swift` —
   `captureSponsorSegments` (fetch) + `captureAndStoreSponsorSegments` (background
@@ -45,7 +51,10 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
 | `Yattee/Services/API/InvidiousAPI.swift` | `isShort` in `InvidiousVideo`/`InvidiousRecommendedVideo` `toVideo`; 6 history/position methods (must stay — `httpClient` is file-private) | `FORK` |
 | `Yattee/Services/API/PipedAPI.swift` | thread `isShort` into two `toVideo` builders | — |
 | `Yattee/Core/SettingsManager.swift` | two backing `_` stored vars (must stay — stored props can't be in extensions) | `FORK` |
-| `Yattee/Services/Player/PlayerService.swift` | `invidiousHistorySync` property + setter; push in `saveProgress`/`saveProgressAndSync`, `markWatched` in `saveProgressAsCompleted`, resume fallback in `play()`; **offline-sponsorblock**: load persisted segments (+ online fallback) in the downloaded-stream branch of `play()` | `FORK` |
+| `Yattee/Services/Player/PlayerService.swift` | `invidiousHistorySync` property + setter; push in `saveProgress`/`saveProgressAndSync`, `markWatched` in `saveProgressAsCompleted`, resume fallback + load-time `syncIfDue()` refresh in `play()`; **offline-sponsorblock**: load persisted segments (+ online fallback) in the downloaded-stream branch of `play()` | `FORK` |
+| `Yattee/Services/BackgroundRefresh/BackgroundFeedRefresher.swift` | `invidiousHistorySync.sync()` at the top of `performBackgroundRefresh()`, before (and independent of) the notifications gate | `FORK (playback-sync)` |
+| `Yattee/Services/BackgroundRefresh/BackgroundRefreshManager.swift` | `handleNotificationsEnabledChanged` keeps the iOS task scheduled when sync still needs it | `FORK (playback-sync)` |
+| `Yattee/YatteeApp.swift` | both iOS `scheduleIOSBackgroundRefresh()` gates use `backgroundRefreshShouldBeScheduled` | `FORK (playback-sync)` |
 | `Yattee/Core/AppEnvironment.swift` | construct + inject `InvidiousHistorySyncService`, pull on launch; **offline-sponsorblock**: `downloadManager.setSponsorBlockDependencies(...)` | `FORK` |
 | `Yattee/Services/Downloads/Download.swift` | `sponsorSegments` field + CodingKey + `decodeIfPresent` (backwards-compatible) | `FORK (offline-sponsorblock)` |
 | `Yattee/Services/Downloads/DownloadManager.swift` | `sponsorBlockAPI`/`sponsorBlockSettings` props + `setSponsorBlockDependencies` (stored props can't live in an extension; tvOS stub has a no-op) | `FORK (offline-sponsorblock)` |
@@ -54,7 +63,7 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
 | `Yattee/Views/Subscriptions/SubscriptionsView.swift` | `videoKind` state, filter in `filteredVideos`, `videoKindPicker` in both layouts | — |
 | `Yattee/Views/Search/SearchView.swift` | `videoKind` state, filter in `unifiedResults`, `videoKindPicker` under filter strip | — |
 | `Yattee/Views/Settings/PlaybackSettingsView.swift` | "Hide Shorts" toggle | — |
-| `Yattee/Views/Settings/PrivacySettingsView.swift` | "Sync history with Invidious account" toggle | — |
+| `Yattee/Views/Settings/PrivacySettingsView.swift` | "Sync history with Invidious account" toggle; its `onChange` also schedules/cancels the iOS background-refresh task | — |
 | `Yattee.xcodeproj/project.pbxproj`, `*/*.entitlements`, `Yattee/Info*.plist`, `*/AppGroup.swift`, `Yattee/Core/AppIdentifiers.swift` | bundle-ID rebrand + iCloud `Production` env | — |
 
 ## Notes

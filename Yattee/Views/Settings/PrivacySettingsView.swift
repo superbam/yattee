@@ -77,6 +77,16 @@ struct PrivacySettingsView: View {
                         } else {
                             historySync.stopPeriodicSync()
                         }
+                        #if os(iOS)
+                        // Keep the OS background-refresh task in sync with the
+                        // setting so playback sync runs in the background even
+                        // when video notifications are off. (playback-sync)
+                        if settingsManager.backgroundRefreshShouldBeScheduled {
+                            appEnvironment?.backgroundRefreshManager.scheduleIOSBackgroundRefresh()
+                        } else {
+                            appEnvironment?.backgroundRefreshManager.cancelIOSBackgroundRefresh()
+                        }
+                        #endif
                     }
                 }
 

@@ -43,4 +43,12 @@ extension SettingsManager {
             localDefaults.set(newValue, forKey: "syncWatchHistoryWithInvidiousAccount")
         }
     }
+
+    /// Whether the iOS OS-level background refresh task should be scheduled.
+    /// True when video notifications need it, OR when Invidious history sync is
+    /// on — so playback sync keeps running in the background even if the user
+    /// has notifications disabled. (playback-sync)
+    var backgroundRefreshShouldBeScheduled: Bool {
+        backgroundNotificationsEnabled || (saveWatchHistory && syncWatchHistoryWithInvidiousAccount)
+    }
 }

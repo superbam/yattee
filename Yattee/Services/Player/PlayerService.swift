@@ -227,6 +227,15 @@ final class PlayerService {
             availableStreams = []
         }
 
+        // FORK (playback-sync): on loading a new online video, refresh the
+        // Invidious account's watch state / positions in the background
+        // (throttled). Non-blocking — this resume still uses the cached value
+        // (computed below) and self-heals on the next open; cross-device state
+        // typically lands before playback for an idle account.
+        if isNewVideo, case .global = video.id.source {
+            Task { @MainActor [weak self] in await self?.invidiousHistorySync?.syncIfDue() }
+        }
+
         // Clear sponsor block state from previous video
         state.sponsorSegments = []
         state.currentSegment = nil

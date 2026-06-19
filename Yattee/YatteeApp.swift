@@ -323,7 +323,10 @@ struct YatteeApp: App {
                 }
 
                 #if os(iOS)
-                if appEnvironment.settingsManager.backgroundNotificationsEnabled {
+                // FORK (playback-sync): also schedule when Invidious history
+                // sync is on, so playback sync runs in the background even if
+                // video notifications are disabled.
+                if appEnvironment.settingsManager.backgroundRefreshShouldBeScheduled {
                     appEnvironment.backgroundRefreshManager.scheduleIOSBackgroundRefresh()
                 }
                 #endif
@@ -355,9 +358,10 @@ struct YatteeApp: App {
         guard !backgroundTasksRegistered else { return }
         backgroundTasksRegistered = true
 
-        // If notifications are enabled, schedule the first refresh
+        // Schedule the first refresh if notifications OR Invidious history sync
+        // (FORK: playback-sync) need background work.
         #if os(iOS)
-        if appEnvironment.settingsManager.backgroundNotificationsEnabled {
+        if appEnvironment.settingsManager.backgroundRefreshShouldBeScheduled {
             appEnvironment.backgroundRefreshManager.scheduleIOSBackgroundRefresh()
         }
         #endif

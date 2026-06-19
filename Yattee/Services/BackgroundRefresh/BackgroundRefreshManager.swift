@@ -162,7 +162,9 @@ final class BackgroundRefreshManager {
         guard !ProcessInfo.processInfo.isMacCatalystApp else { return }
         if enabled {
             scheduleIOSBackgroundRefresh()
-        } else {
+        } else if appEnvironment?.settingsManager.backgroundRefreshShouldBeScheduled != true {
+            // FORK (playback-sync): keep the task scheduled if Invidious history
+            // sync still needs background work, even with notifications off.
             cancelIOSBackgroundRefresh()
         }
         #elseif os(macOS)
