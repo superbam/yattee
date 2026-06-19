@@ -39,7 +39,7 @@
 - Local files, SMB network shares, WebDAV servers
 
 **Integrations**
-- [SponsorBlock](https://sponsor.ajay.app/) (configurable skip categories)
+- [SponsorBlock](https://sponsor.ajay.app/) (configurable skip categories, also applied to offline downloads)
 - [DeArrow](https://dearrow.ajay.app/) (crowdsourced titles and thumbnails)
 - [Return YouTube Dislike](https://returnyoutubedislike.com/)
 
@@ -51,11 +51,13 @@
 - Subscriptions with per-channel notifications
 - Bookmarks with tags and notes, playlists, watch history
 - Unified search across all configured sources
+- Filter subscriptions and search results by Videos, Shorts, or All
 - Import/export subscriptions (JSON, CSV, OPML)
 
 **Downloads & Sync**
 - Offline video and audio downloads with quality selection
 - iCloud sync for bookmarks, subscriptions, history, and settings across devices
+- Optional watch history and resume-position sync with your Invidious account
 - Handoff continuity between iPhone, iPad, Mac, and Apple TV
 
 **Apple Ecosystem**
