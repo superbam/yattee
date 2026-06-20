@@ -1679,7 +1679,18 @@ final class PlayerService {
         #if os(iOS) || os(tvOS)
         do {
             let session = AVAudioSession.sharedInstance()
+            #if os(tvOS)
+            // Best-guess fix for multi-speaker output: opt this player's audio
+            // into the system's long-form audio route, which is what an
+            // AirPlay 2 multi-speaker group uses. With the default policy a
+            // custom (non-AVPlayer) player appears to stay on the single
+            // default output (e.g. a HomePod stereo pair). .longFormVideo is
+            // unavailable on tvOS; .longFormAudio is the applicable analog.
+            // Must match reactivateAudioSession() in MPVBackend.
+            try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormAudio)
+            #else
             try session.setCategory(.playback, mode: .moviePlayback)
+            #endif
             try session.setActive(true)
 
             #if os(tvOS)
