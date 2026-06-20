@@ -1880,7 +1880,14 @@ extension MPVBackend: MPVClientDelegate {
     private func reactivateAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
+            #if os(tvOS)
+            // Keep the .longFormVideo route sharing policy on re-activation so
+            // multi-speaker AirPlay routing isn't dropped back to the default
+            // output. Must match setupAudioSession() in PlayerService.
+            try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo, options: [])
+            #else
             try session.setCategory(.playback, mode: .moviePlayback, options: [])
+            #endif
             try session.setActive(true, options: [])
             LoggingService.shared.debug("MPV: Audio session reactivated for Now Playing", category: .mpv)
         } catch {

@@ -1679,7 +1679,18 @@ final class PlayerService {
         #if os(iOS) || os(tvOS)
         do {
             let session = AVAudioSession.sharedInstance()
+            #if os(tvOS)
+            // The .longFormVideo route sharing policy is what lets tvOS route
+            // our audio to the user's selected video output — including an
+            // AirPlay 2 multi-speaker set. With the default policy a custom
+            // (non-AVPlayer) player only reaches the default output (e.g. a
+            // HomePod stereo pair) and ignores the other selected speakers.
+            // Must match reactivateAudioSession() in MPVBackend or a later
+            // re-activation would drop back to the default policy.
+            try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
+            #else
             try session.setCategory(.playback, mode: .moviePlayback)
+            #endif
             try session.setActive(true)
 
             #if os(tvOS)
