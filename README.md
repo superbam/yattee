@@ -11,6 +11,8 @@
 
 </div>
 
+> **This is a community fork** of [yattee/yattee](https://github.com/yattee/yattee) that adds two-way Invidious account sync (watch history + resume position), server-driven Shorts filtering, and offline SponsorBlock. See [What this fork changes](#what-this-fork-changes).
+
 ## Install
 
 <a href="https://yattee.stream/beta2">
@@ -66,6 +68,25 @@
 - Customizable home layout, accent colors, player controls, and app icon
 - Clipboard URL detection and deep linking (`yattee://`)
 - Remote control between devices on your network
+
+## What this fork changes
+
+This is a fork of [yattee/yattee](https://github.com/yattee/yattee) with the additions below on top of upstream. Implementation notes and the upstream-merge checklist live in [FORK.md](FORK.md).
+
+- **Two-way Invidious account playback sync** — watch history *and* resume position sync with your signed-in Invidious account, independent of iCloud. Positions are pushed during playback and pulled on launch, on foreground, on a periodic timer, when you open a video (a short blocking single-video fetch so resume is correct on first open), and during background refresh. Resume uses the furthest of your local and synced position, and videos watched on other devices are filled into your History with full metadata. Enabled per device in **Settings → Privacy** (requires being signed in to the instance).
+- **Server-driven Shorts filtering** — Shorts are identified from the backend's authoritative flag (falling back to a length heuristic). Adds a global **Hide Shorts** setting and a per-list **Videos / Shorts / All** selector in Subscriptions and Search.
+- **Offline SponsorBlock** (iOS/macOS) — SponsorBlock segments are captured when a video is downloaded and stored with it, so sponsor skipping keeps working during fully offline playback.
+- **Separate app identity** — ships under its own bundle identifier (`com.bammcm.yattee`) and iCloud container, so it can be installed alongside upstream Yattee.
+
+### Companion Invidious fork
+
+Some features need a matching Invidious backend — [superbam/invidious](https://github.com/superbam/invidious) (`shorts-filter` branch):
+
+- `isShort` flag in the JSON API (drives Shorts filtering)
+- `/api/v1/auth/positions` endpoints backing cross-device resume-position sync
+- the Invidious **web player and thumbnail resume bars** wired to those synced positions, so a position set in Yattee shows on the Invidious website and vice-versa
+
+Watch-history sync works against stock Invidious; **resume-position sync requires this fork**.
 
 ## Yattee Server
 
