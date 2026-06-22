@@ -536,5 +536,10 @@ final class SettingsManager {
         _videoSwipeActionOrder = nil
         _videoSwipeActionVisibility = nil
         #endif
+        // FORK (shorts-filter / playback-sync): clear fork setting caches too,
+        // so an iCloud-pulled syncWatchHistoryWithInvidiousAccount value is
+        // re-read instead of serving a stale cached value.
+        _hideShorts = nil
+        _syncWatchHistoryWithInvidiousAccount = nil
     }
 }

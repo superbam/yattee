@@ -56,7 +56,8 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
 | `Yattee/Models/Video.swift` | `isShort: Bool` property + init param/assignment | — |
 | `Yattee/Services/API/InvidiousAPI.swift` | `isShort` in `InvidiousVideo`/`InvidiousRecommendedVideo` `toVideo`; 7 history/position methods (must stay — `httpClient` is file-private) | `FORK` |
 | `Yattee/Services/API/PipedAPI.swift` | thread `isShort` into two `toVideo` builders | — |
-| `Yattee/Core/SettingsManager.swift` | two backing `_` stored vars (must stay — stored props can't be in extensions) | `FORK` |
+| `Yattee/Core/SettingsManager.swift` | two backing `_` stored vars (must stay — stored props can't be in extensions); `clearCache()` resets both so an iCloud-pulled `syncWatchHistoryWithInvidiousAccount` is re-read | `FORK` |
+| `Yattee/Core/Settings/SettingsKey.swift` | `syncWatchHistoryWithInvidiousAccount` case (not platform-specific / not local-only → iCloud-synced across devices) | `FORK (playback-sync)` |
 | `Yattee/Services/Player/PlayerService.swift` | `invidiousHistorySync` property + setter; push in `saveProgress`/`saveProgressAndSync`, `markWatched` in `saveProgressAsCompleted`, resume fallback + load-time `syncIfDue()` refresh in `play()`; **offline-sponsorblock**: load persisted segments (+ online fallback) in the downloaded-stream branch of `play()` | `FORK` |
 | `Yattee/Services/BackgroundRefresh/BackgroundFeedRefresher.swift` | `invidiousHistorySync.sync()` at the top of `performBackgroundRefresh()`, before (and independent of) the notifications gate | `FORK (playback-sync)` |
 | `Yattee/Services/BackgroundRefresh/BackgroundRefreshManager.swift` | `handleNotificationsEnabledChanged` keeps the iOS task scheduled when sync still needs it | `FORK (playback-sync)` |

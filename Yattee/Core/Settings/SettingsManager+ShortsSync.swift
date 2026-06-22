@@ -30,17 +30,20 @@ extension SettingsManager {
 
     /// Whether to sync watch history and playback position with the signed-in
     /// Invidious account (requires the shorts-filter fork's positions endpoint).
-    /// Independent of iCloud sync. Stored locally. Default false.
+    /// Synced across devices via iCloud (when settings sync is enabled), so
+    /// enabling it once follows the account. The instance sign-in (SID) is still
+    /// per device unless carried by iCloud Keychain. Default false. The backing
+    /// `_syncWatchHistoryWithInvidiousAccount` storage lives in SettingsManager.
     var syncWatchHistoryWithInvidiousAccount: Bool {
         get {
             if let cached = _syncWatchHistoryWithInvidiousAccount { return cached }
-            let value = localDefaults.bool(forKey: "syncWatchHistoryWithInvidiousAccount")
+            let value = bool(for: .syncWatchHistoryWithInvidiousAccount, default: false)
             _syncWatchHistoryWithInvidiousAccount = value
             return value
         }
         set {
             _syncWatchHistoryWithInvidiousAccount = newValue
-            localDefaults.set(newValue, forKey: "syncWatchHistoryWithInvidiousAccount")
+            set(newValue, for: .syncWatchHistoryWithInvidiousAccount)
         }
     }
 

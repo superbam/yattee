@@ -127,6 +127,11 @@ enum SettingsKey: String, CaseIterable {
     // Onboarding
     case onboardingCompleted
 
+    // FORK (playback-sync): Invidious account watch-history / position sync
+    // toggle. Not platform-specific and not local-only, so it syncs across
+    // devices via iCloud and enabling it once follows the account.
+    case syncWatchHistoryWithInvidiousAccount
+
     /// Whether this key should have platform-specific prefixes.
     /// Platform-specific keys are stored under a `iOS.` / `macOS.` / `tvOS.` prefix
     /// in both UserDefaults and iCloud, so each platform family syncs independently.
