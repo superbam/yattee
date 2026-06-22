@@ -570,7 +570,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = Yattee/Yattee.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -653,7 +653,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = Yattee/Yattee.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -794,7 +794,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = Yattee/Yattee.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -873,7 +873,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -901,7 +901,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = YatteeShareExtension/YatteeShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YatteeShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Yattee Share Extension";
@@ -932,7 +932,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = YatteeTopShelf/YatteeTopShelf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YatteeTopShelf/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Yattee Top Shelf";
@@ -966,7 +966,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = YatteeShareExtension/YatteeShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YatteeShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Yattee Share Extension";
@@ -996,7 +996,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = YatteeShareExtension/YatteeShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YatteeShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Yattee Share Extension";
@@ -1027,7 +1027,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = YatteeTopShelf/YatteeTopShelf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YatteeTopShelf/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Yattee Top Shelf";
@@ -1060,7 +1060,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = YatteeTopShelf/YatteeTopShelf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YatteeTopShelf/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Yattee Top Shelf";
@@ -1094,7 +1094,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -1122,7 +1122,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 272;
+				CURRENT_PROJECT_VERSION = 273;
 				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
