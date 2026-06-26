@@ -63,6 +63,14 @@ final class SubscriptionFeedCache {
     /// Whether app is in foreground (polling only allowed in foreground).
     private var isAppInForeground = true
 
+    /// Periodic foreground timer that re-warms the feed while the app stays open.
+    private var periodicWarmTimer: Timer?
+
+    /// How often the periodic warm fires. The actual network refresh is gated by
+    /// the configurable cache-validity window inside `warmIfNeeded`, so this only
+    /// needs to tick often enough to catch staleness promptly.
+    private let periodicWarmInterval: TimeInterval = 300
+
     private init() {
         setupLifecycleObservers()
     }
@@ -100,12 +108,37 @@ final class SubscriptionFeedCache {
     private func handleAppBackgrounded() {
         isAppInForeground = false
         cancelPolling()
+        stopPeriodicWarm()
     }
 
     /// Cancels any active feed status polling.
     func cancelPolling() {
         pollingTask?.cancel()
         pollingTask = nil
+    }
+
+    /// Starts the periodic foreground re-warm timer. Does not refresh immediately —
+    /// callers warm explicitly when becoming active. Idempotent — safe to call
+    /// repeatedly. The timer fires `warmIfNeeded`, which no-ops while the cache is
+    /// still valid, so a stale feed gets refreshed without redundant network calls.
+    func startPeriodicWarm(using appEnvironment: AppEnvironment) {
+        isAppInForeground = true
+        periodicWarmTimer?.invalidate()
+        periodicWarmTimer = Timer.scheduledTimer(
+            withTimeInterval: periodicWarmInterval,
+            repeats: true
+        ) { [weak self, weak appEnvironment] _ in
+            guard let appEnvironment else { return }
+            Task { @MainActor [weak self] in
+                self?.warmIfNeeded(using: appEnvironment)
+            }
+        }
+    }
+
+    /// Stops the periodic re-warm timer. Call when the app enters the background.
+    func stopPeriodicWarm() {
+        periodicWarmTimer?.invalidate()
+        periodicWarmTimer = nil
     }
 
     // MARK: - Cache Validity

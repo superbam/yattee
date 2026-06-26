@@ -90,6 +90,23 @@ struct YatteeApp: App {
                         dataManager: appEnvironment.dataManager,
                         settingsManager: appEnvironment.settingsManager
                     )
+
+                    // Cold-launch feed warm. `.onChange(of: scenePhase)` does not fire
+                    // for the initial `.active` state, so on a cold launch (the system
+                    // often terminates tvOS apps that have been idle for days) the
+                    // scene-phase warm below never runs and the Home feed shows stale
+                    // disk-cached data. Warm here to mirror the resume path; the call
+                    // is throttled by the feed cache validity window, so it no-ops when
+                    // the cache is still fresh.
+                    appEnvironment.subscriptionAccountValidator.validateAndCorrectIfNeeded()
+                    SubscriptionFeedCache.shared.warmIfNeeded(using: appEnvironment)
+                    // Keep the feed fresh while the app stays open.
+                    SubscriptionFeedCache.shared.startPeriodicWarm(using: appEnvironment)
+                    #else
+                    // Keep the feed fresh while the app stays open. `.onChange(of:
+                    // scenePhase)` does not fire for the initial `.active` state, so
+                    // start the timer here on cold launch too.
+                    SubscriptionFeedCache.shared.startPeriodicWarm(using: appEnvironment)
                     #endif
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .continueUserActivity)) { notification in
@@ -245,6 +262,8 @@ struct YatteeApp: App {
                 // Validate subscription account (auto-correct if invalid)
                 appEnvironment.subscriptionAccountValidator.validateAndCorrectIfNeeded()
                 SubscriptionFeedCache.shared.warmIfNeeded(using: appEnvironment)
+                // Keep the feed fresh while the app stays foregrounded.
+                SubscriptionFeedCache.shared.startPeriodicWarm(using: appEnvironment)
 
                 // Fetch remote CloudKit changes (catches missed push notifications)
                 Task {
@@ -264,6 +283,7 @@ struct YatteeApp: App {
             if newPhase == .background {
                 appEnvironment.cloudKitSync.stopForegroundPolling()
                 appEnvironment.invidiousHistorySync.stopPeriodicSync()
+                SubscriptionFeedCache.shared.stopPeriodicWarm()
                 Task {
                     await appEnvironment.cloudKitSync.flushPendingChanges()
                 }
@@ -296,6 +316,8 @@ struct YatteeApp: App {
                 // Validate subscription account (auto-correct if invalid)
                 appEnvironment.subscriptionAccountValidator.validateAndCorrectIfNeeded()
                 SubscriptionFeedCache.shared.warmIfNeeded(using: appEnvironment)
+                // Keep the feed fresh while the app stays foregrounded.
+                SubscriptionFeedCache.shared.startPeriodicWarm(using: appEnvironment)
 
                 // Check clipboard for external video URLs
                 checkClipboardForExternalURL()
@@ -318,6 +340,7 @@ struct YatteeApp: App {
             if newPhase == .background {
                 appEnvironment.cloudKitSync.stopForegroundPolling()
                 appEnvironment.invidiousHistorySync.stopPeriodicSync()
+                SubscriptionFeedCache.shared.stopPeriodicWarm()
                 Task {
                     await appEnvironment.cloudKitSync.flushPendingChanges()
                 }
