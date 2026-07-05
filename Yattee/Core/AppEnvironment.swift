@@ -53,6 +53,7 @@ final class AppEnvironment {
     let pipedAPI: PipedAPI
     let subscriptionAccountValidator: SubscriptionAccountValidator
     let invidiousHistorySync: InvidiousHistorySyncService
+    let sourceStatusRefresher: SourceStatusRefresher // FORK (sources-status)
     let playerControlsLayoutService: PlayerControlsLayoutService
     let legacyMigrationService: LegacyDataMigrationService
     let sourcesSettings: SourcesSettings
@@ -289,6 +290,18 @@ final class AppEnvironment {
         self.invidiousHistorySync = historySync
         player.setInvidiousHistorySync(historySync)
         Task { await historySync.sync() }
+
+        // FORK (sources-status): probes sources while the sources list is
+        // open so status badges stay current (see SourceStatusRefresher).
+        self.sourceStatusRefresher = SourceStatusRefresher(
+            httpClient: client,
+            httpClientFactory: self.httpClientFactory,
+            webDAVClient: self.webDAVClient,
+            smbClient: self.smbClient,
+            instancesManager: instances,
+            mediaSourcesManager: mediaSources,
+            basicAuthCredentialsManager: basicAuthCreds
+        )
 
         // Initialize Player Controls Layout Service
         let layoutService = PlayerControlsLayoutService()

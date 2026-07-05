@@ -15992,7 +15992,15 @@
       }
     },
     "sources.status.authFailed" : {
-
+      "comment" : "Status when source credentials are rejected",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authentication Failed"
+          }
+        }
+      }
     },
     "sources.status.authRequired" : {
       "comment" : "Status when authentication is required",
@@ -16023,6 +16031,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Disabled"
+          }
+        }
+      }
+    },
+    "sources.status.offline" : {
+      "comment" : "Status when a source cannot be reached",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offline"
           }
         }
       }

@@ -104,6 +104,11 @@ struct SourcesListView: View {
             EditSourceView(source: source)
         }
         #endif
+        // FORK (sources-status): probe all sources while this list is visible
+        // so status badges stay fresh; cancelled automatically on disappear.
+        .task {
+            await appEnvironment?.sourceStatusRefresher.runWhileVisible()
+        }
         .confirmationDialog(
             deleteConfirmationMessage,
             isPresented: $showingDeleteConfirmation,
@@ -362,6 +367,11 @@ struct SourcesListView: View {
                 Label(String(localized: "sources.status.authRequired"), systemImage: "key.fill")
                     .font(.caption2)
                     .foregroundStyle(.orange)
+            // FORK (sources-status): surface unreachable servers in the list.
+            case .offline:
+                Label(String(localized: "sources.status.offline"), systemImage: "wifi.slash")
+                    .font(.caption2)
+                    .foregroundStyle(.red)
             default:
                 EmptyView()
             }
@@ -493,6 +503,12 @@ struct SourcesListView: View {
                         .font(.caption2)
                         .foregroundStyle(.orange)
                 }
+                // FORK (sources-status): surface unreachable network shares.
+                else if isFileSourceOffline(source) {
+                    Label(String(localized: "sources.status.offline"), systemImage: "wifi.slash")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
             }
 
             Spacer()
@@ -504,6 +520,12 @@ struct SourcesListView: View {
             #endif
         }
         .contentShape(Rectangle())
+    }
+
+    // FORK (sources-status): offline state for WebDAV/SMB rows, fed by the
+    // SourceStatusRefresher probe loop above.
+    private func isFileSourceOffline(_ source: MediaSource) -> Bool {
+        appEnvironment?.sourceStatusRefresher.offlineFileSourceIDs.contains(source.id) ?? false
     }
 
     // MARK: - Disabled Badge

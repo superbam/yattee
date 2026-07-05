@@ -148,7 +148,7 @@ final class InvidiousHistorySyncService {
                 return "HTTP 404 — endpoint missing. /api/v1/auth/positions requires the " +
                     "shorts-filter Invidious fork; stock Invidious does not support position sync."
             }
-            return "HTTP \(statusCode): \(message)"
+            return "HTTP \(statusCode): \(message ?? "no message")"
         }
         if case APIError.unauthorized = error {
             return "unauthorized — SID rejected or expired; sign in to the instance again."

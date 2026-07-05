@@ -1,6 +1,6 @@
 # Fork changes (com.bammcm.yattee)
 
-This fork of `yattee/yattee` (branch `rewrite/v2`) adds four things and rebrands
+This fork of `yattee/yattee` (branch `rewrite/v2`) adds five things and rebrands
 the bundle identifier. This file is the **merge checklist**: when pulling
 upstream, re-apply / re-verify the inline edits listed under "Upstream files
 touched". All fork-only logic lives in new files (no merge risk there).
@@ -36,6 +36,17 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
    downloaded videos (where the normal online fetch is skipped). All categories
    are stored; the player filters by enabled categories at playback time.
 
+5. **Live source status refresh** — while the Sources list is open, every
+   enabled source is probed every 30s (instances via a cheap per-type endpoint —
+   Invidious `/api/v1/stats`, Piped `/healthcheck`, PeerTube `/api/v1/config`,
+   Yattee Server `/info` with stored Basic Auth; WebDAV/SMB via
+   `testConnection`). Instance results are written through the existing
+   `InstancesManager` status plumbing (which upstream defines but never calls),
+   so Offline / Auth Required / Auth Failed badges appear and clear live; an
+   Offline badge was added for unreachable servers and network shares. The
+   probe loop is a `.task` on `SourcesListView`, so it stops when the list
+   disappears.
+
 ## New files (fork-owned, conflict-free)
 
 - `Yattee/Services/InvidiousHistorySyncService.swift` — push/pull coordinator.
@@ -45,6 +56,8 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
   `syncWatchHistoryWithInvidiousAccount` accessors &
   `backgroundRefreshShouldBeScheduled` (notifications-or-sync gate).
 - `Yattee/Models/Navigation/FeedVideoKind.swift` — All/Videos/Shorts enum.
+- `Yattee/Services/SourceStatusRefresher.swift` — sources-list status probe
+  loop (all probing/classification logic lives here).
 - `Yattee/Services/Downloads/DownloadManager+OfflineSponsorBlock.swift` —
   `captureSponsorSegments` (fetch) + `captureAndStoreSponsorSegments` (background
   patch of the completed record). All offline-SponsorBlock logic lives here.
@@ -62,7 +75,9 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
 | `Yattee/Services/BackgroundRefresh/BackgroundFeedRefresher.swift` | `invidiousHistorySync.sync()` at the top of `performBackgroundRefresh()`, before (and independent of) the notifications gate | `FORK (playback-sync)` |
 | `Yattee/Services/BackgroundRefresh/BackgroundRefreshManager.swift` | `handleNotificationsEnabledChanged` keeps the iOS task scheduled when sync still needs it | `FORK (playback-sync)` |
 | `Yattee/YatteeApp.swift` | both iOS `scheduleIOSBackgroundRefresh()` gates use `backgroundRefreshShouldBeScheduled` | `FORK (playback-sync)` |
-| `Yattee/Core/AppEnvironment.swift` | construct + inject `InvidiousHistorySyncService`, pull on launch; **offline-sponsorblock**: `downloadManager.setSponsorBlockDependencies(...)` | `FORK` |
+| `Yattee/Core/AppEnvironment.swift` | construct + inject `InvidiousHistorySyncService`, pull on launch; **offline-sponsorblock**: `downloadManager.setSponsorBlockDependencies(...)`; **sources-status**: `sourceStatusRefresher` property + construction | `FORK` |
+| `Yattee/Views/Settings/SourcesListView.swift` | `.task` probe loop; `.offline` case in `instanceStatusView`; offline badge + `isFileSourceOffline` helper for WebDAV/SMB rows | `FORK (sources-status)` |
+| `Yattee/Localizable.xcstrings` | added `sources.status.offline`; filled empty `sources.status.authFailed` en value (upstream key exists but renders raw) | — |
 | `Yattee/Services/Downloads/Download.swift` | `sponsorSegments` field + CodingKey + `decodeIfPresent` (backwards-compatible) | `FORK (offline-sponsorblock)` |
 | `Yattee/Services/Downloads/DownloadManager.swift` | `sponsorBlockAPI`/`sponsorBlockSettings` props + `setSponsorBlockDependencies` (stored props can't live in an extension; tvOS stub has a no-op) | `FORK (offline-sponsorblock)` |
 | `Yattee/Services/Downloads/DownloadManager+Execution.swift` | one `captureAndStoreSponsorSegments(...)` call in `completeMultiFileDownload` | `FORK (offline-sponsorblock)` |
