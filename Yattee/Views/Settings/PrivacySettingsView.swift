@@ -12,6 +12,7 @@ struct PrivacySettingsView: View {
 
     private let historyRetentionOptions: [Int] = [0, 30, 60, 90, 180, 365]
     private let searchHistoryLimitOptions: [Int] = [10, 15, 25, 50, 100]
+    private let invidiousMarkWatchedThresholdOptions: [Int] = [50, 75, 90, 95, 100]
 
     var body: some View {
         SettingsFormContainer {
@@ -87,6 +88,21 @@ struct PrivacySettingsView: View {
                             appEnvironment?.backgroundRefreshManager.cancelIOSBackgroundRefresh()
                         }
                         #endif
+                    }
+
+                    if settingsManager.syncWatchHistoryWithInvidiousAccount {
+                        PlatformMenuPicker(
+                            "Mark watched threshold",
+                            selection: Binding(
+                                get: { settingsManager.invidiousMarkWatchedThresholdPercent },
+                                set: { settingsManager.invidiousMarkWatchedThresholdPercent = $0 }
+                            )
+                        ) {
+                            ForEach(invidiousMarkWatchedThresholdOptions, id: \.self) { percent in
+                                Text("\(percent)%")
+                                    .tag(percent)
+                            }
+                        }
                     }
                 }
 

@@ -82,6 +82,12 @@ enum SettingsKey: String, CaseIterable {
     case sidebarMainItemOrder
     case sidebarMainItemVisibility
     case sidebarStartupTab
+
+    // tvOS: dedicated shortcut for making Subscriptions the launch tab.
+    // Not local-only, so the toggle itself follows the account via iCloud;
+    // the remembered prior startup tab is local-only bookkeeping for undo.
+    case tvOSOpenToSubscriptionsAtLaunch
+    case tvOSStartupTabBeforeSubscriptionsDefault
     case sidebarSourcesEnabled
     case sidebarSourceSort
     case sidebarSourcesLimitEnabled
@@ -131,6 +137,10 @@ enum SettingsKey: String, CaseIterable {
     // toggle. Not platform-specific and not local-only, so it syncs across
     // devices via iCloud and enabling it once follows the account.
     case syncWatchHistoryWithInvidiousAccount
+    // FORK (playback-sync): percentage of a video that must be watched before
+    // it's marked watched on the Invidious account. Follows the same sync
+    // rules as the toggle above.
+    case invidiousMarkWatchedThresholdPercent
 
     /// Whether this key should have platform-specific prefixes.
     /// Platform-specific keys are stored under a `iOS.` / `macOS.` / `tvOS.` prefix
@@ -147,6 +157,7 @@ enum SettingsKey: String, CaseIterable {
              .tabBarItemOrder, .tabBarItemVisibility, .tabBarStartupTab,
              // Sidebar layout/selection
              .sidebarMainItemOrder, .sidebarMainItemVisibility, .sidebarStartupTab,
+             .tvOSOpenToSubscriptionsAtLaunch, .tvOSStartupTabBeforeSubscriptionsDefault,
              .sidebarSourcesEnabled, .sidebarSourceSort, .sidebarSourcesLimitEnabled, .sidebarMaxSources,
              .sidebarChannelsEnabled, .sidebarMaxChannels, .sidebarChannelSort, .sidebarChannelsLimitEnabled,
              .sidebarPlaylistsEnabled, .sidebarMaxPlaylists, .sidebarPlaylistSort, .sidebarPlaylistsLimitEnabled,
@@ -167,7 +178,8 @@ enum SettingsKey: String, CaseIterable {
         switch self {
         case .remoteControlCustomDeviceName, .remoteControlHideWhenBackgrounded,
              .activeControlsPresetID,  // Per-device preset selection
-             .onboardingCompleted:  // Per-device onboarding state
+             .onboardingCompleted,  // Per-device onboarding state
+             .tvOSStartupTabBeforeSubscriptionsDefault:  // Internal undo bookkeeping, not a user-facing setting
             return true
         default:
             return false

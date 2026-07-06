@@ -945,6 +945,58 @@ extension SettingsManager {
         }
     }
 
+    #if os(tvOS)
+    /// tvOS-only shortcut: when enabled, makes Subscriptions visible in the
+    /// sidebar and sets it as the startup tab, so the app opens directly to
+    /// Subscriptions. Turning it off restores whatever startup tab was
+    /// configured before enabling it (falls back to Home if none was saved,
+    /// e.g. the setting arrived via iCloud sync onto a device that never
+    /// stored the local "before" bookkeeping). Does not change visibility
+    /// back on disable, since the user may have wanted Subscriptions visible
+    /// regardless.
+    var tvOSOpenToSubscriptionsAtLaunch: Bool {
+        get {
+            if let cached = _tvOSOpenToSubscriptionsAtLaunch { return cached }
+            let value = bool(for: .tvOSOpenToSubscriptionsAtLaunch, default: false)
+            _tvOSOpenToSubscriptionsAtLaunch = value
+            return value
+        }
+        set {
+            let oldValue = tvOSOpenToSubscriptionsAtLaunch
+            guard newValue != oldValue else { return }
+            _tvOSOpenToSubscriptionsAtLaunch = newValue
+            set(newValue, for: .tvOSOpenToSubscriptionsAtLaunch)
+
+            if newValue {
+                tvOSStartupTabBeforeSubscriptionsDefault = sidebarStartupTab
+                var visibility = sidebarMainItemVisibility
+                visibility[.subscriptions] = true
+                sidebarMainItemVisibility = visibility
+                sidebarStartupTab = .subscriptions
+            } else {
+                sidebarStartupTab = tvOSStartupTabBeforeSubscriptionsDefault ?? .home
+            }
+        }
+    }
+
+    /// The startup tab saved just before `tvOSOpenToSubscriptionsAtLaunch` was
+    /// last turned on, so turning it off can restore it. Local-only: it's
+    /// undo bookkeeping, not a setting worth syncing across devices.
+    private var tvOSStartupTabBeforeSubscriptionsDefault: SidebarMainItem? {
+        get {
+            if let cached = _tvOSStartupTabBeforeSubscriptionsDefault { return cached }
+            guard let rawValue = string(for: .tvOSStartupTabBeforeSubscriptionsDefault) else { return nil }
+            let value = SidebarMainItem(rawValue: rawValue)
+            _tvOSStartupTabBeforeSubscriptionsDefault = value
+            return value
+        }
+        set {
+            _tvOSStartupTabBeforeSubscriptionsDefault = newValue
+            set(newValue?.rawValue ?? "", for: .tvOSStartupTabBeforeSubscriptionsDefault)
+        }
+    }
+    #endif
+
     /// Valid startup tabs for tab bar mode.
     /// Includes fixed tabs (Home, Search) plus all visible configurable tabs.
     func validStartupTabsForTabBar() -> [SidebarMainItem] {

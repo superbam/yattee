@@ -13,7 +13,7 @@ struct LayoutNavigationSettingsView: View {
     var body: some View {
         SettingsFormContainer {
             if let settings = appEnvironment?.settingsManager {
-                CustomizationSection()
+                CustomizationSection(settings: settings)
                 #if os(iOS)
                 HapticsSection(settings: settings)
                 #endif
@@ -76,6 +76,8 @@ private struct HapticsSection: View {
 // MARK: - Customization Section
 
 private struct CustomizationSection: View {
+    @Bindable var settings: SettingsManager
+
     var body: some View {
         SettingsFormSection {
             #if os(tvOS)
@@ -86,6 +88,10 @@ private struct CustomizationSection: View {
                 ) { HomeSettingsView() }
             } label: {
                 Label(String(localized: "settings.appearance.home.customize"), systemImage: SidebarItem.home.systemImage)
+            }
+
+            Toggle(isOn: $settings.tvOSOpenToSubscriptionsAtLaunch) {
+                Label("Open to Subscriptions at Launch", systemImage: "play.square.stack.fill")
             }
             #else
             SettingsNavigationRow("settings.appearance.home.customize", systemImage: SidebarItem.home.systemImage) {

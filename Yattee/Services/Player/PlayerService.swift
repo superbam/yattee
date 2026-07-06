@@ -2496,6 +2496,15 @@ final class PlayerService {
         // Push the position to the Invidious account (debounced internally).
         invidiousHistorySync?.pushPosition(videoID: video.id.videoID, seconds: state.currentTime)
 
+        // Mark watched on the Invidious account once the configured threshold
+        // is crossed (default 90%), so history isn't gated on literal EOF.
+        if state.duration > 0 {
+            invidiousHistorySync?.markWatchedIfThresholdReached(
+                videoID: video.id.videoID,
+                progress: state.currentTime / state.duration
+            )
+        }
+
         // Update Handoff activity with current playback time
         handoffManager?.updatePlaybackTime(state.currentTime)
     }

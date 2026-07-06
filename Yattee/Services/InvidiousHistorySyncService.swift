@@ -29,6 +29,9 @@ final class InvidiousHistorySyncService {
     /// Debounce bookkeeping for position pushes.
     private var lastPushedAt: [String: Date] = [:]
     private let minPushInterval: TimeInterval = 5
+    /// Videos already marked watched this session, so the periodic
+    /// threshold check doesn't re-POST every tick for the rest of playback.
+    private var thresholdMarkedVideoIDs: Set<String> = []
 
     /// Periodic pull while the app is foregrounded.
     private var periodicSyncTimer: Timer?
@@ -70,32 +73,33 @@ final class InvidiousHistorySyncService {
         )
     }
 
-    /// Resolves the signed-in Invidious instance and SID, mirroring
-    /// InvidiousSubscriptionProvider.getAuthenticatedInstance(). Logs why
-    /// resolution failed so silent no-ops are diagnosable.
+    /// Resolves the signed-in Invidious instance and SID. History sync has no
+    /// necessary relationship to the subscription account (subscriptions may
+    /// live on Piped, a different Invidious instance, or the local account),
+    /// so it can't just mirror InvidiousSubscriptionProvider.getAuthenticatedInstance()
+    /// the way it used to — that made history sync silently no-op whenever the
+    /// subscription account wasn't this exact Invidious login. Instead, prefer
+    /// the subscription account's instance when it *is* Invidious (the common
+    /// case), then fall back to any other enabled Invidious instance that has
+    /// stored credentials. Logs why resolution failed so silent no-ops are
+    /// diagnosable.
     private func authenticatedInstance(_ operation: String) -> (Instance, String)? {
         let account = settingsManager.subscriptionAccount
-        let instance: Instance?
-        if let instanceID = account.instanceID {
-            instance = instancesManager.instances.first { $0.id == instanceID && $0.isEnabled }
-        } else {
-            instance = instancesManager.instances.first { $0.type == .invidious && $0.isEnabled }
+        var candidates = instancesManager.instances.filter { $0.type == .invidious && $0.isEnabled }
+        if account.type == .invidious, let instanceID = account.instanceID,
+           let index = candidates.firstIndex(where: { $0.id == instanceID }) {
+            let preferred = candidates.remove(at: index)
+            candidates.insert(preferred, at: 0)
         }
-        guard let instance else {
+        guard let instance = candidates.first(where: { credentialsManager.sid(for: $0) != nil }) else {
             LoggingService.shared.info(
-                "Invidious history sync skipped (\(operation)): no enabled Invidious instance " +
-                    "(subscriptionAccount.type=\(account.type), instanceID=\(account.instanceID?.uuidString ?? "nil"))",
+                "Invidious history sync skipped (\(operation)): no enabled Invidious instance with stored credentials " +
+                    "(\(candidates.count) enabled Invidious instance(s) checked)",
                 category: .api
             )
             return nil
         }
-        guard let sid = credentialsManager.sid(for: instance) else {
-            LoggingService.shared.info(
-                "Invidious history sync skipped (\(operation)): not signed in to \(instance.url.absoluteString)",
-                category: .api
-            )
-            return nil
-        }
+        guard let sid = credentialsManager.sid(for: instance) else { return nil }
         return (instance, sid)
     }
 
@@ -138,6 +142,22 @@ final class InvidiousHistorySyncService {
                 )
             }
         }
+    }
+
+    /// Marks watched once playback crosses `invidiousMarkWatchedThresholdPercent`,
+    /// so server-side history reflects normal viewing (stopping before the
+    /// literal end, skipping the outro, switching videos) instead of requiring
+    /// true end-of-file. Called from the periodic progress-save tick, so this
+    /// guards against re-POSTing on every subsequent tick once the threshold
+    /// is crossed. Natural end-of-file still calls `markWatched` directly as
+    /// an unconditional backstop.
+    func markWatchedIfThresholdReached(videoID: String, progress: Double) {
+        guard enabled, progress.isFinite else { return }
+        guard !thresholdMarkedVideoIDs.contains(videoID) else { return }
+        let threshold = Double(settingsManager.invidiousMarkWatchedThresholdPercent) / 100
+        guard progress >= threshold else { return }
+        thresholdMarkedVideoIDs.insert(videoID)
+        markWatched(videoID: videoID)
     }
 
     /// Describes an API error, calling out the fork-only positions endpoint

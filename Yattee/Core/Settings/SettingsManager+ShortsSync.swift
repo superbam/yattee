@@ -47,6 +47,25 @@ extension SettingsManager {
         }
     }
 
+    /// Percentage of a video's duration that must be watched before Yattee
+    /// marks it watched on the signed-in Invidious account (`POST
+    /// /api/v1/auth/history/:id`). Independent of the local "finished" badge,
+    /// which is always fixed at 90% (`WatchEntry.updateProgress`). Playing a
+    /// video to literal end-of-file always marks it watched regardless of this
+    /// setting. Synced via iCloud alongside the toggle above. Default 90.
+    var invidiousMarkWatchedThresholdPercent: Int {
+        get {
+            if let cached = _invidiousMarkWatchedThresholdPercent { return cached }
+            let value = integer(for: .invidiousMarkWatchedThresholdPercent, default: 90)
+            _invidiousMarkWatchedThresholdPercent = value
+            return value
+        }
+        set {
+            _invidiousMarkWatchedThresholdPercent = newValue
+            set(newValue, for: .invidiousMarkWatchedThresholdPercent)
+        }
+    }
+
     /// Whether the iOS OS-level background refresh task should be scheduled.
     /// True when video notifications need it, OR when Invidious history sync is
     /// on — so playback sync keeps running in the background even if the user

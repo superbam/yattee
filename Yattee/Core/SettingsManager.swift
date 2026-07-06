@@ -128,6 +128,10 @@ final class SettingsManager {
     var _sidebarMainItemOrder: [SidebarMainItem]?
     var _sidebarMainItemVisibility: [SidebarMainItem: Bool]?
     var _sidebarStartupTab: SidebarMainItem?
+    #if os(tvOS)
+    var _tvOSOpenToSubscriptionsAtLaunch: Bool?
+    var _tvOSStartupTabBeforeSubscriptionsDefault: SidebarMainItem?
+    #endif
 
     // Tab bar startup
     var _tabBarStartupTab: SidebarMainItem?
@@ -181,6 +185,7 @@ final class SettingsManager {
     // FORK: backing storage for fork settings (accessors in SettingsManager+ShortsSync.swift)
     var _hideShorts: Bool?
     var _syncWatchHistoryWithInvidiousAccount: Bool?
+    var _invidiousMarkWatchedThresholdPercent: Int?
 
     // Subscription account settings
     var _subscriptionAccount: SubscriptionAccount?
@@ -477,6 +482,10 @@ final class SettingsManager {
         _sidebarMainItemVisibility = nil
         _sidebarStartupTab = nil
         _tabBarStartupTab = nil
+        #if os(tvOS)
+        _tvOSOpenToSubscriptionsAtLaunch = nil
+        _tvOSStartupTabBeforeSubscriptionsDefault = nil
+        #endif
         _sidebarSourcesEnabled = nil
         _sidebarSourceSort = nil
         _sidebarSourcesLimitEnabled = nil
@@ -541,5 +550,6 @@ final class SettingsManager {
         // re-read instead of serving a stale cached value.
         _hideShorts = nil
         _syncWatchHistoryWithInvidiousAccount = nil
+        _invidiousMarkWatchedThresholdPercent = nil
     }
 }
