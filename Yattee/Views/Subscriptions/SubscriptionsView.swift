@@ -442,6 +442,9 @@ struct SubscriptionsView: View {
                         #endif
                         .presentationDetents([.height(520), .large])
                         .presentationDragIndicator(.visible)
+                        #if os(iOS)
+                        .presentationBackground(.thickMaterial)
+                        #endif
                         .liquidGlassSheetContent(sourceID: "subscriptionsViewOptions", in: sheetTransition)
                     }
                     .task {

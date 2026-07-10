@@ -115,6 +115,9 @@ struct QueueActionSheet: View {
         .presentationDetents([.height(280)])
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(16)
+        #if os(iOS)
+        .presentationBackground(.thickMaterial)
+        #endif
     }
 }
 

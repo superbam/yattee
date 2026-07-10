@@ -190,6 +190,9 @@ struct ManageChannelsView: View {
             #endif
             .presentationDetents([.height(360), .large])
             .presentationDragIndicator(.visible)
+            #if os(iOS)
+            .presentationBackground(.thickMaterial)
+            #endif
             .liquidGlassSheetContent(sourceID: "manageChannelsViewOptions", in: sheetTransition)
         }
         .onAppear {

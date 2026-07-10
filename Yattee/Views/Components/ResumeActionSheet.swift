@@ -171,6 +171,9 @@ struct ResumeActionSheet: View {
         .presentationDetents([.height(240)])
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(16)
+        #if os(iOS)
+        .presentationBackground(.thickMaterial)
+        #endif
     }
     #endif
 
