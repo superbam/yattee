@@ -380,8 +380,11 @@ struct InstanceBrowseView: View {
             
             // Load watch entries for hide watched feature
             loadWatchEntries()
-            
+
             await startContentLoad()
+        }
+        .task {
+            await runAutoRefreshLoop()
         }
         .onReceive(NotificationCenter.default.publisher(for: .watchHistoryDidChange)) { _ in
             loadWatchEntries()
@@ -1062,6 +1065,31 @@ struct InstanceBrowseView: View {
         }
         contentLoadTask = task
         await task.value
+    }
+
+    /// How often to silently re-fetch Popular/Trending while this view stays
+    /// on screen, so newly uploaded/trending videos show up without a manual
+    /// pull-to-refresh. Matches the interval already used elsewhere in the
+    /// app for "periodically re-check while foregrounded" work (subscription
+    /// feed staleness check, Invidious history sync).
+    private static let autoRefreshInterval: Duration = .seconds(300)
+
+    /// Cancelled automatically by SwiftUI when the view disappears (the
+    /// `.task` that calls this is torn down), mirroring
+    /// `SourceStatusRefresher.runWhileVisible()` — no manual foreground/
+    /// background bookkeeping needed since this is view-scoped.
+    ///
+    /// Only refreshes Popular/Trending: Feed resets pagination on
+    /// `forceRefresh` (would jump a scrolled-in feed back to page 1) and
+    /// Playlists/search results aren't "new videos populating" in the same
+    /// sense, so both are left to manual pull-to-refresh.
+    private func runAutoRefreshLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: Self.autoRefreshInterval)
+            guard !Task.isCancelled else { break }
+            guard !isInSearchMode, selectedTab == .popular || selectedTab == .trending else { continue }
+            await startContentLoad(forceRefresh: true)
+        }
     }
 
     private func performLoadContent(forceRefresh: Bool = false) async {
