@@ -323,12 +323,7 @@ final class SearchViewModel {
     // MARK: - Private
 
     private func prefetchBranding(for videos: [Video]) {
-        guard let deArrowProvider else { return }
-        let youtubeIDs = videos.compactMap { video -> String? in
-            if case .global = video.id.source { return video.id.videoID }
-            return nil
-        }
-        deArrowProvider.prefetch(videoIDs: youtubeIDs)
+        deArrowProvider?.prefetch(videos: videos)
     }
     
     /// Filters out watched videos if hideWatchedVideos is enabled.

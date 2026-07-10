@@ -706,10 +706,6 @@ final class SubscriptionFeedCache {
 
     /// Prefetches DeArrow branding for YouTube videos.
     private func prefetchDeArrow(for videos: [Video], using appEnvironment: AppEnvironment) {
-        let youtubeIDs = videos.compactMap { video -> String? in
-            if case .global = video.id.source { return video.id.videoID }
-            return nil
-        }
-        appEnvironment.deArrowBrandingProvider.prefetch(videoIDs: youtubeIDs)
+        appEnvironment.deArrowBrandingProvider.prefetch(videos: videos)
     }
 }

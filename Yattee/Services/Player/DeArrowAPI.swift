@@ -28,8 +28,20 @@ struct DeArrowBranding: Codable, Sendable {
         return nil
     }
 
-    /// Returns the best thumbnail timestamp.
-    var bestThumbnailTimestamp: Double? {
+    /// Returns the best thumbnail timestamp in seconds.
+    ///
+    /// Community-submitted timestamps (locked/highest-voted) are already
+    /// absolute seconds. The `randomTime` fallback, used when no submission
+    /// exists, is a 0.0–1.0 *fraction* of the video's duration per DeArrow's
+    /// API contract — passing it straight through as seconds requests a
+    /// frame from effectively the first instant of the video (often a
+    /// channel's cold-open/teaser montage, which looks unrelated to the
+    /// video's actual subject). `videoDuration` from the branding response
+    /// is preferred when present; otherwise the caller supplies the
+    /// duration from Yattee's own video metadata.
+    /// - Parameter fallbackDuration: The video's duration in seconds, used
+    ///   only for the `randomTime` fraction-to-seconds conversion.
+    func bestThumbnailTimestamp(fallbackDuration: TimeInterval) -> Double? {
         // Prefer locked thumbnails, then highest voted non-original
         if let locked = thumbnails.first(where: { $0.locked && !$0.original }) {
             return locked.timestamp
@@ -37,8 +49,11 @@ struct DeArrowBranding: Codable, Sendable {
         if let best = thumbnails.first(where: { !$0.original && $0.votes >= 0 }) {
             return best.timestamp
         }
-        // Fall back to random time if available
-        return randomTime
+        // Fall back to random time — a fraction of duration, not seconds.
+        guard let randomTime else { return nil }
+        let duration = (videoDuration.flatMap { $0 > 0 ? $0 : nil }) ?? fallbackDuration
+        guard duration > 0 else { return nil }
+        return randomTime * duration
     }
 }
 

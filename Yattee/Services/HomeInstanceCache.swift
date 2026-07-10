@@ -142,13 +142,7 @@ final class HomeInstanceCache {
             await saveToDisk()
 
             // Prefetch DeArrow branding for YouTube videos
-            let youtubeIDs = videos.compactMap { video -> String? in
-                if case .global = video.id.source { return video.id.videoID }
-                return nil
-            }
-            if !youtubeIDs.isEmpty {
-                appEnvironment.deArrowBrandingProvider.prefetch(videoIDs: youtubeIDs)
-            }
+            appEnvironment.deArrowBrandingProvider.prefetch(videos: videos)
         } catch {
             LoggingService.shared.error(
                 "HomeInstanceCache.refresh: Failed to fetch \(contentType.rawValue) from \(instance.displayName)",

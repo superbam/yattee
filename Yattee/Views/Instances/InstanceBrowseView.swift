@@ -1222,12 +1222,7 @@ struct InstanceBrowseView: View {
     }
 
     private func prefetchBranding(for videos: [Video]) {
-        guard let appEnvironment else { return }
-        let youtubeIDs = videos.compactMap { video -> String? in
-            if case .global = video.id.source { return video.id.videoID }
-            return nil
-        }
-        appEnvironment.deArrowBrandingProvider.prefetch(videoIDs: youtubeIDs)
+        appEnvironment?.deArrowBrandingProvider.prefetch(videos: videos)
     }
 
     /// Fetches channel thumbnails for subscriptions, using cache when available.

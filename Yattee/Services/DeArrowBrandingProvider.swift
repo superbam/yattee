@@ -26,6 +26,11 @@ final class DeArrowBrandingProvider {
 
     // MARK: - Request Tracking
 
+    /// Durations (in seconds) for videos with a pending/in-flight fetch, used
+    /// to convert DeArrow's `randomTime` fraction into an absolute timestamp.
+    /// See `DeArrowBranding.bestThumbnailTimestamp(fallbackDuration:)`.
+    private var durations: [String: TimeInterval] = [:]
+
     /// Video IDs currently being fetched.
     private var inFlightRequests: Set<String> = []
 
@@ -101,6 +106,7 @@ final class DeArrowBrandingProvider {
         let videoID = video.id.videoID
         guard !processedIDs.contains(videoID) && !inFlightRequests.contains(videoID) else { return }
 
+        durations[videoID] = video.duration
         inFlightRequests.insert(videoID)
 
         Task(priority: .low) {
@@ -111,16 +117,24 @@ final class DeArrowBrandingProvider {
     }
 
     /// Prefetches branding for multiple videos with throttling.
-    /// - Parameter videoIDs: Array of YouTube video IDs to prefetch.
-    func prefetch(videoIDs: [String]) {
+    /// Only fetches for YouTube videos (global source).
+    /// - Parameter videos: Videos to prefetch branding for.
+    func prefetch(videos: [Video]) {
         guard settingsManager?.deArrowEnabled == true else { return }
 
-        // Filter out already processed or in-flight IDs
-        let idsToFetch = videoIDs.filter { id in
-            !processedIDs.contains(id) && !inFlightRequests.contains(id)
+        // Only YouTube videos, and not already processed or in-flight
+        let toFetch = videos.filter { video in
+            guard case .global = video.id.source else { return false }
+            let id = video.id.videoID
+            return !processedIDs.contains(id) && !inFlightRequests.contains(id)
         }
 
-        guard !idsToFetch.isEmpty else { return }
+        guard !toFetch.isEmpty else { return }
+
+        for video in toFetch {
+            durations[video.id.videoID] = video.duration
+        }
+        let idsToFetch = toFetch.map { $0.id.videoID }
 
         // Cancel any existing prefetch task
         prefetchTask?.cancel()
@@ -137,6 +151,7 @@ final class DeArrowBrandingProvider {
 
         titles.removeAll()
         thumbnailURLs.removeAll()
+        durations.removeAll()
         inFlightRequests.removeAll()
         processedIDs.removeAll()
 
@@ -163,7 +178,8 @@ final class DeArrowBrandingProvider {
             }
 
             // Handle thumbnail with timestamp verification
-            if let expectedTimestamp = branding.bestThumbnailTimestamp {
+            let fallbackDuration = durations.removeValue(forKey: videoID) ?? 0
+            if let expectedTimestamp = branding.bestThumbnailTimestamp(fallbackDuration: fallbackDuration) {
                 if let serverTimestamp = cachedThumbnail.serverTimestamp,
                    cachedThumbnail.imageData != nil,
                    timestampsMatch(serverTimestamp, expectedTimestamp) {
