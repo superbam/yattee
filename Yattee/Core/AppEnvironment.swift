@@ -288,6 +288,7 @@ final class AppEnvironment {
             dataManager: dm
         )
         self.invidiousHistorySync = historySync
+        dm.invidiousHistorySync = historySync
         player.setInvidiousHistorySync(historySync)
         Task { await historySync.sync() }
 

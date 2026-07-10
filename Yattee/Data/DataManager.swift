@@ -23,6 +23,12 @@ final class DataManager {
     /// Weak reference to CloudKit sync engine.
     weak var cloudKitSync: CloudKitSyncEngine?
 
+    /// Weak reference to the Invidious account history/position sync service.
+    /// Used so local watch-history mutations (mark watched/unwatched, remove,
+    /// clear) push the same change to the signed-in Invidious account instead
+    /// of only ever pulling from it. (playback-sync)
+    weak var invidiousHistorySync: InvidiousHistorySyncService?
+
     /// Whether CloudKit sync is currently enabled for this instance.
     private(set) var isCloudKitEnabled: Bool = false
     

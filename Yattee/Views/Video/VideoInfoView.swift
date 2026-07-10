@@ -2269,33 +2269,37 @@ struct VideoInfoView: View {
     /// Play the video, respecting the user's resume action setting for partially watched videos.
     private func playVideo() {
         guard let video = displayedVideo, let env = appEnvironment else { return }
-        
-        // Get saved watch progress from database
-        let savedProgress = env.dataManager.watchProgress(for: video.id.videoID)
-        let videoDuration = video.duration
-        // When duration is 0 (not yet loaded), use a large threshold to avoid false "completed" detection
-        let completionThreshold = videoDuration > 0 ? videoDuration * 0.9 : Double.greatestFiniteMagnitude
-        // Minimum threshold - treat < 5 seconds as "not watched" to avoid asking for very short progress
-        let minimumThreshold: TimeInterval = 5
-        
-        // Only consider resume logic if there's meaningful saved progress (>5s) and video wasn't completed
-        if let savedProgress, savedProgress >= minimumThreshold, savedProgress < completionThreshold {
-            let resumeActionSetting = env.settingsManager.resumeAction
-            
-            switch resumeActionSetting {
-            case .continueWatching:
-                // Use saved progress as start time
-                playVideoWithStartTime(savedProgress)
-            case .startFromBeginning:
-                // Always start from beginning
+
+        Task {
+            // Resolve the resume position: Invidious server as source of truth
+            // when sync is enabled, else local database.
+            let localProgress = env.dataManager.watchProgress(for: video.id.videoID)
+            let savedProgress = await env.invidiousHistorySync.resumePosition(for: video, localProgress: localProgress)
+            let videoDuration = video.duration
+            // When duration is 0 (not yet loaded), use a large threshold to avoid false "completed" detection
+            let completionThreshold = videoDuration > 0 ? videoDuration * 0.9 : Double.greatestFiniteMagnitude
+            // Minimum threshold - treat < 5 seconds as "not watched" to avoid asking for very short progress
+            let minimumThreshold: TimeInterval = 5
+
+            // Only consider resume logic if there's meaningful saved progress (>5s) and video wasn't completed
+            if let savedProgress, savedProgress >= minimumThreshold, savedProgress < completionThreshold {
+                let resumeActionSetting = env.settingsManager.resumeAction
+
+                switch resumeActionSetting {
+                case .continueWatching:
+                    // Use saved progress as start time
+                    playVideoWithStartTime(savedProgress)
+                case .startFromBeginning:
+                    // Always start from beginning
+                    playVideoWithStartTime(0)
+                case .ask:
+                    // Show the resume action sheet
+                    resumeSheetData = ResumeSheetData(video: video, resumeTime: savedProgress)
+                }
+            } else {
+                // No saved progress or video was completed - play from beginning
                 playVideoWithStartTime(0)
-            case .ask:
-                // Show the resume action sheet
-                resumeSheetData = ResumeSheetData(video: video, resumeTime: savedProgress)
             }
-        } else {
-            // No saved progress or video was completed - play from beginning
-            playVideoWithStartTime(0)
         }
     }
     

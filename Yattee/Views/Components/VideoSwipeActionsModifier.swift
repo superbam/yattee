@@ -179,6 +179,9 @@ struct VideoSwipeActionsModifier: ViewModifier {
             tint: action.tint,
             background: action.backgroundColor
         ) { reset in
+            // DataManager pushes the Invidious-account equivalent itself
+            // (see DataManager+WatchHistory.swift), so this only needs the
+            // local call.
             if isWatched {
                 appEnvironment?.dataManager.markAsUnwatched(videoID: video.id.videoID)
             } else {

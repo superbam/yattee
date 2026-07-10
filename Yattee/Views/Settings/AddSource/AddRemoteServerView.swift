@@ -415,8 +415,26 @@ struct AddRemoteServerView: View {
                         .foregroundStyle(.green)
                 }
                 .accessibilityIdentifier("addRemoteServer.detectedType")
+
+                // Fork detection (playback-sync): confirms at add-time whether
+                // this specific Invidious instance runs the shorts-filter fork,
+                // so the user can see the enhanced sync was actually picked up.
+                if detectionResult?.isShortsFilterFork == true {
+                    HStack {
+                        Label("Playback sync fork detected", systemImage: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(.blue)
+                        Spacer()
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.blue)
+                    }
+                    .accessibilityIdentifier("addRemoteServer.forkDetected")
+                }
             } header: {
                 Text(String(localized: "sources.detectedType"))
+            } footer: {
+                if detectedType == .invidious && detectionResult?.isShortsFilterFork == true {
+                    Text("This instance supports syncing playback position across devices, in addition to watch history.")
+                }
             }
         }
 
@@ -771,7 +789,8 @@ struct AddRemoteServerView: View {
             type: type,
             url: url,
             name: name.isEmpty ? nil : name,
-            allowInvalidCertificates: allowInvalidCertificates
+            allowInvalidCertificates: allowInvalidCertificates,
+            isShortsFilterFork: detectionResult?.isShortsFilterFork
         )
 
         if !basicAuthUsername.isEmpty, !basicAuthPassword.isEmpty {

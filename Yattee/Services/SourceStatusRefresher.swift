@@ -130,8 +130,11 @@ final class SourceStatusRefresher {
         )
 
         do {
-            _ = try await client(for: instance).fetchData(endpoint, baseURL: instance.url)
+            let data = try await client(for: instance).fetchData(endpoint, baseURL: instance.url)
             instancesManager?.clearStatus(for: instance)
+            if instance.type == .invidious {
+                refreshForkDetection(for: instance, statsData: data)
+            }
         } catch APIError.unauthorized {
             let hasCredentials = basicAuthCredentialsManager?.hasCredentials(for: instance) ?? false
             instancesManager?.updateStatus(hasCredentials ? .authFailed : .authRequired, for: instance)
@@ -140,6 +143,18 @@ final class SourceStatusRefresher {
             // HTTP-level errors (the server responded, so it's reachable).
             instancesManager?.updateStatusFromError(error, for: instance)
         }
+    }
+
+    /// Keeps `Instance.isShortsFilterFork` current from the `/api/v1/stats`
+    /// body already fetched for the reachability probe — no extra request.
+    /// (playback-sync)
+    private func refreshForkDetection(for instance: Instance, statsData: Data) {
+        guard let stats = try? JSONDecoder().decode(InstanceDetectorModels.InvidiousStats.self, from: statsData) else { return }
+        let isFork = stats.software?.branch == "shorts-filter"
+        guard instance.isShortsFilterFork != isFork else { return }
+        var updated = instance
+        updated.isShortsFilterFork = isFork
+        instancesManager?.update(updated)
     }
 
     /// Cheapest known always-available endpoint per backend type.

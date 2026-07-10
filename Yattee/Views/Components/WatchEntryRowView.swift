@@ -37,7 +37,11 @@ struct WatchEntryRowView: View {
         )
         .tappableVideo(
             video,
-            startTime: startTime ?? entry.watchedSeconds,
+            // Not `?? entry.watchedSeconds`: let TappableVideoModifier resolve
+            // the resume position itself (Invidious source of truth when sync
+            // is enabled, else this local value) rather than forcing a
+            // local-only value that would bypass that check entirely.
+            startTime: startTime,
             queueSource: queueSource,
             sourceLabel: sourceLabel,
             videoList: videoList,

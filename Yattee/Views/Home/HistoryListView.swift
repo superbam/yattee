@@ -282,7 +282,10 @@ struct HistoryListView: View {
         )
         .tappableVideo(
             video,
-            startTime: entry.watchedSeconds,
+            // Not forced to entry.watchedSeconds: let TappableVideoModifier
+            // resolve resume position itself (Invidious source of truth when
+            // sync is enabled, else this local value).
+            startTime: nil,
             customActions: [
                 VideoContextAction(
                     String(localized: "home.history.remove"),
@@ -314,7 +317,10 @@ struct HistoryListView: View {
                     )
                     .tappableVideo(
                         video,
-                        startTime: entry.watchedSeconds,
+                        // Not forced to entry.watchedSeconds: let TappableVideoModifier
+                        // resolve resume position itself (Invidious source of truth
+                        // when sync is enabled, else this local value).
+                        startTime: nil,
                         customActions: [
                             VideoContextAction(
                                 String(localized: "home.history.remove"),

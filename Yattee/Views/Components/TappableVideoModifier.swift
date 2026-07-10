@@ -170,42 +170,47 @@ struct TappableVideoModifier: ViewModifier {
     private func playVideoAndQueueRest() {
         guard let env = appEnvironment else { return }
 
-        // Determine the saved progress: prefer explicitly passed startTime, then query database
-        // This handles cases where startTime is passed from views like Continue Watching/History
-        // that already have the watch position, avoiding issues with data not being synced yet
-        let savedProgress: TimeInterval?
-        if let passedStartTime = startTime, passedStartTime > 0 {
-            // Use the startTime that was passed to the modifier (e.g., from Continue Watching)
-            savedProgress = passedStartTime
-        } else {
-            // Query database for watch progress
-            savedProgress = env.dataManager.watchProgress(for: video.id.videoID)
-        }
-
-        let videoDuration = video.duration
-        // When duration is 0 (not yet loaded), use a large threshold to avoid false "completed" detection
-        let completionThreshold = videoDuration > 0 ? videoDuration * 0.9 : Double.greatestFiniteMagnitude
-        // Minimum threshold - treat < 5 seconds as "not watched" to avoid asking for very short progress
-        let minimumThreshold: TimeInterval = 5
-
-        // Only consider resume logic if there's meaningful saved progress (>5s) and video wasn't completed
-        if let savedProgress, savedProgress >= minimumThreshold, savedProgress < completionThreshold {
-            let resumeActionSetting = env.settingsManager.resumeAction
-
-            switch resumeActionSetting {
-            case .continueWatching:
-                // Use saved progress as start time
-                playVideoWithStartTime(savedProgress)
-            case .startFromBeginning:
-                // Always start from beginning
-                playVideoWithStartTime(0)
-            case .ask:
-                // Show the resume action sheet with data bundled together
-                resumeSheetData = ResumeSheetData(video: video, resumeTime: savedProgress)
+        Task {
+            // Determine the saved progress: prefer explicitly passed startTime
+            // (e.g. a deep-linked timestamp), otherwise resolve the resume
+            // position — Invidious server as source of truth when sync is
+            // enabled, else local database. Routing through
+            // invidiousHistorySync here (rather than letting PlayerService
+            // resolve it after we've already forced a startTime) is what lets
+            // a synced position win for the common case of tapping a video row.
+            let savedProgress: TimeInterval?
+            if let passedStartTime = startTime, passedStartTime > 0 {
+                savedProgress = passedStartTime
+            } else {
+                let localProgress = env.dataManager.watchProgress(for: video.id.videoID)
+                savedProgress = await env.invidiousHistorySync.resumePosition(for: video, localProgress: localProgress)
             }
-        } else {
-            // No saved progress or video was completed - play from beginning
-            playVideoWithStartTime(0)
+
+            let videoDuration = video.duration
+            // When duration is 0 (not yet loaded), use a large threshold to avoid false "completed" detection
+            let completionThreshold = videoDuration > 0 ? videoDuration * 0.9 : Double.greatestFiniteMagnitude
+            // Minimum threshold - treat < 5 seconds as "not watched" to avoid asking for very short progress
+            let minimumThreshold: TimeInterval = 5
+
+            // Only consider resume logic if there's meaningful saved progress (>5s) and video wasn't completed
+            if let savedProgress, savedProgress >= minimumThreshold, savedProgress < completionThreshold {
+                let resumeActionSetting = env.settingsManager.resumeAction
+
+                switch resumeActionSetting {
+                case .continueWatching:
+                    // Use saved progress as start time
+                    playVideoWithStartTime(savedProgress)
+                case .startFromBeginning:
+                    // Always start from beginning
+                    playVideoWithStartTime(0)
+                case .ask:
+                    // Show the resume action sheet with data bundled together
+                    resumeSheetData = ResumeSheetData(video: video, resumeTime: savedProgress)
+                }
+            } else {
+                // No saved progress or video was completed - play from beginning
+                playVideoWithStartTime(0)
+            }
         }
     }
 

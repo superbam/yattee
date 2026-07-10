@@ -6,12 +6,13 @@
 //  account. Watched state uses the stock /api/v1/auth/history endpoints;
 //  resume positions use the shorts-filter fork's /api/v1/auth/positions.
 //
-//  Pushes happen during playback (debounced) and on completion. A one-shot
-//  pull seeds local state: watched IDs upgrade existing WatchEntry rows to
-//  finished, and positions are cached in memory and used as a resume fallback
-//  for videos that have no local WatchEntry yet (duration is known at play
-//  time, so no fabricated WatchEntry metadata is needed). This is independent
-//  of the iCloud watch-history sync.
+//  When enabled, the server is the source of truth in both directions:
+//  pushes happen during playback (debounced) and on completion/manual mark;
+//  pulls fully mirror local WatchEntry.isFinished to the server's watched
+//  list (marking AND unmarking), and resume position prefers the synced
+//  value over local (see `resumePosition(for:localProgress:)`) rather than
+//  merely filling in when there's no local WatchEntry yet. This is
+//  independent of the iCloud watch-history sync.
 //
 
 import Foundation
@@ -103,13 +104,26 @@ final class InvidiousHistorySyncService {
         return (instance, sid)
     }
 
+    /// Records a definitive fork-detection result learned from a real API
+    /// response (not just the add-time/status-probe checks), so future calls
+    /// can skip wasted round trips once we know for certain an instance
+    /// doesn't support position sync — and so an instance that gets upgraded
+    /// to the fork starts getting synced without the user re-adding it.
+    private func recordForkDetection(_ instance: Instance, isFork: Bool) {
+        guard instance.isShortsFilterFork != isFork else { return }
+        var updated = instance
+        updated.isShortsFilterFork = isFork
+        instancesManager.update(updated)
+    }
+
     // MARK: - Push
 
     /// Pushes a resume position. Debounced per video unless `force` is set.
     func pushPosition(videoID: String, seconds: Double, force: Bool = false) {
         guard enabled else { logDisabledReason("pushPosition"); return }
         guard seconds.isFinite, seconds >= 0,
-              let (instance, sid) = authenticatedInstance("pushPosition") else { return }
+              let (instance, sid) = authenticatedInstance("pushPosition"),
+              instance.likelySupportsPositionSync else { return }
         if !force, let last = lastPushedAt[videoID], Date().timeIntervalSince(last) < minPushInterval {
             return
         }
@@ -137,6 +151,40 @@ final class InvidiousHistorySyncService {
             } catch {
                 LoggingService.shared.error(
                     "Invidious markWatched failed for \(videoID)",
+                    category: .api,
+                    details: Self.describe(error)
+                )
+            }
+        }
+    }
+
+    /// Pushes an unwatched state, e.g. from the manual "Mark Unwatched" action.
+    /// Needed so a manual local unmark isn't undone by the next sync pull,
+    /// which now mirrors the server list exactly in both directions. Also
+    /// clears the server-side resume position — otherwise the next open
+    /// still resumes from the old position via `resumePosition`, defeating
+    /// the point of unwatching.
+    func markUnwatched(videoID: String) {
+        guard enabled else { logDisabledReason("markUnwatched"); return }
+        guard let (instance, sid) = authenticatedInstance("markUnwatched") else { return }
+        thresholdMarkedVideoIDs.remove(videoID)
+        serverPositions[videoID] = nil
+        Task {
+            do {
+                try await invidiousAPI.markUnwatched(videoID: videoID, instance: instance, sid: sid)
+            } catch {
+                LoggingService.shared.error(
+                    "Invidious markUnwatched failed for \(videoID)",
+                    category: .api,
+                    details: Self.describe(error)
+                )
+            }
+            guard instance.likelySupportsPositionSync else { return }
+            do {
+                try await invidiousAPI.deletePlaybackPosition(videoID: videoID, instance: instance, sid: sid)
+            } catch {
+                LoggingService.shared.error(
+                    "Invidious deletePlaybackPosition failed for \(videoID)",
                     category: .api,
                     details: Self.describe(error)
                 )
@@ -212,7 +260,7 @@ final class InvidiousHistorySyncService {
         guard let (instance, sid) = authenticatedInstance("sync") else { return }
         lastSyncAt = Date()
         async let watchedTask = invidiousAPI.watchHistory(instance: instance, sid: sid)
-        async let positionsTask = invidiousAPI.playbackPositions(instance: instance, sid: sid)
+        async let positionsResult = fetchPositions(instance: instance, sid: sid)
         var watched: [String] = []
         do {
             watched = try await watchedTask
@@ -223,18 +271,9 @@ final class InvidiousHistorySyncService {
                 details: Self.describe(error)
             )
         }
-        var positions: [String: Double] = [:]
-        do {
-            positions = try await positionsTask
-        } catch {
-            LoggingService.shared.error(
-                "Invidious positions pull failed",
-                category: .api,
-                details: Self.describe(error)
-            )
-        }
+        let positions = await positionsResult
         serverPositions = positions
-        dataManager.markFinishedFromSync(videoIDs: Set(watched))
+        dataManager.reconcileFinishedFromSync(watchedVideoIDs: Set(watched))
         LoggingService.shared.info(
             "Invidious history sync: \(watched.count) watched, \(positions.count) positions from \(instance.url.absoluteString)",
             category: .api
@@ -242,6 +281,31 @@ final class InvidiousHistorySyncService {
         // Seed full history rows for account-watched videos this device has
         // never seen, so they appear in History (not just as watched badges).
         await hydrateWatchedEntries(watchedIDs: watched, instance: instance)
+    }
+
+    /// Fetches the bulk positions map, skipping the request entirely once the
+    /// instance is confirmed not to support it. This is also where fork
+    /// support gets definitively confirmed or ruled out: a success means the
+    /// instance is fork-enabled, a 404 means it isn't — either way the result
+    /// is persisted so later calls (push/fresh-fetch/delete) can trust the
+    /// flag instead of guessing. (playback-sync)
+    private func fetchPositions(instance: Instance, sid: String) async -> [String: Double] {
+        guard instance.likelySupportsPositionSync else { return [:] }
+        do {
+            let result = try await invidiousAPI.playbackPositions(instance: instance, sid: sid)
+            recordForkDetection(instance, isFork: true)
+            return result
+        } catch APIError.httpError(404, _) {
+            recordForkDetection(instance, isFork: false)
+            return [:]
+        } catch {
+            LoggingService.shared.error(
+                "Invidious positions pull failed",
+                category: .api,
+                details: Self.describe(error)
+            )
+            return [:]
+        }
     }
 
     // MARK: - Watched-entry hydration
@@ -293,12 +357,18 @@ final class InvidiousHistorySyncService {
         )
     }
 
-    // MARK: - Resume fallback
+    // MARK: - Resume resolution
 
-    /// A synced resume position for a video with no local WatchEntry.
-    func cachedPosition(for videoID: String) -> TimeInterval? {
-        guard enabled else { return nil }
-        return serverPositions[videoID]
+    /// Resolves the resume position for a video: the Invidious-synced server
+    /// position when sync is enabled and available (the source of truth),
+    /// otherwise `localProgress`. Callers deciding where to resume playback
+    /// should route through this instead of reading local watch progress
+    /// directly and treating it as final — otherwise a position set on
+    /// another device can never win over a local value.
+    func resumePosition(for video: Video, localProgress: TimeInterval?) async -> TimeInterval? {
+        guard case .global = video.id.source else { return localProgress }
+        let synced = await freshPosition(for: video.id.videoID)
+        return synced ?? localProgress
     }
 
     /// Blocking lookup for the load path: fetches the freshest server position
@@ -308,24 +378,26 @@ final class InvidiousHistorySyncService {
     /// that lack it, and to the cached value if the network fails entirely.
     /// Updates the cache so the badge/list paths see the fresh value too.
     func freshPosition(for videoID: String) async -> TimeInterval? {
-        guard enabled, let (instance, sid) = authenticatedInstance("freshPosition") else {
+        guard enabled, let (instance, sid) = authenticatedInstance("freshPosition"),
+              instance.likelySupportsPositionSync else {
             return serverPositions[videoID]
         }
         do {
             let seconds = try await invidiousAPI.playbackPosition(videoID: videoID, instance: instance, sid: sid)
+            recordForkDetection(instance, isFork: true)
             serverPositions[videoID] = seconds
             return seconds
         } catch APIError.httpError(404, _) {
-            // Single-video endpoint missing (older instance, before redeploy) —
-            // fall back to the bulk pull once. The instance answered the 404
-            // quickly, so this won't add the single-fetch timeout on top.
-            do {
-                let positions = try await invidiousAPI.playbackPositions(instance: instance, sid: sid)
-                serverPositions = positions
-                return positions[videoID]
-            } catch {
-                return serverPositions[videoID]
-            }
+            // Single-video endpoint missing doesn't necessarily mean "not the
+            // fork" — could be an older fork build predating that route — so
+            // fall back to the bulk pull rather than concluding non-support
+            // here. `fetchPositions` is what actually records the definitive
+            // fork detection, from the bulk endpoint's result. We already
+            // know support is at least "likely" (checked above), so this
+            // still attempts the bulk call rather than short-circuiting.
+            let positions = await fetchPositions(instance: instance, sid: sid)
+            serverPositions = positions
+            return positions[videoID]
         } catch {
             // Timeout / network / other — don't pile on another request; load
             // the video now using the last cached position.

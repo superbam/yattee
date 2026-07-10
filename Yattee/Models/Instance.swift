@@ -76,6 +76,16 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
     /// Whether to route video streams through this instance instead of connecting directly to YouTube CDN.
     var proxiesVideos: Bool
 
+    /// Whether this specific Invidious instance is running the "shorts-filter"
+    /// fork, detected via `/api/v1/stats`'s `software.branch` field. Unlocks
+    /// playback-position sync (`/api/v1/auth/positions`) — stock Invidious
+    /// doesn't have it. `nil` means not yet detected (e.g. an instance added
+    /// before this check existed): treated as "might support it, worth
+    /// trying" rather than "confirmed unsupported", so it self-heals to a
+    /// definitive value the next time detection runs rather than silently
+    /// disabling sync for existing users. (playback-sync)
+    var isShortsFilterFork: Bool?
+
     // MARK: - Initialization
 
     init(
@@ -87,7 +97,8 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         dateAdded: Date = Date(),
         apiKey: String? = nil,
         allowInvalidCertificates: Bool = false,
-        proxiesVideos: Bool = false
+        proxiesVideos: Bool = false,
+        isShortsFilterFork: Bool? = nil
     ) {
         self.id = id
         self.type = type
@@ -98,6 +109,7 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         self.apiKey = apiKey
         self.allowInvalidCertificates = allowInvalidCertificates
         self.proxiesVideos = proxiesVideos
+        self.isShortsFilterFork = isShortsFilterFork
     }
 
     init(from decoder: Decoder) throws {
@@ -111,6 +123,7 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey)
         allowInvalidCertificates = try container.decode(Bool.self, forKey: .allowInvalidCertificates)
         proxiesVideos = try container.decodeIfPresent(Bool.self, forKey: .proxiesVideos) ?? false
+        isShortsFilterFork = try container.decodeIfPresent(Bool.self, forKey: .isShortsFilterFork)
     }
 
     // MARK: - Computed Properties
@@ -181,6 +194,14 @@ extension Instance {
     /// Whether this instance supports proxying video streams through itself.
     var supportsVideoProxying: Bool {
         type == .invidious || type == .piped || type == .yatteeServer
+    }
+
+    /// Whether playback-position sync (`/api/v1/auth/positions`) is worth
+    /// attempting against this instance: unknown (never detected) or
+    /// confirmed-fork both say yes; only a confirmed non-fork says no. See
+    /// `isShortsFilterFork`. (playback-sync)
+    var likelySupportsPositionSync: Bool {
+        type == .invidious && isShortsFilterFork != false
     }
 
     /// Whether this instance can sit behind an HTTP Basic Auth reverse proxy.

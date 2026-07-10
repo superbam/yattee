@@ -376,25 +376,19 @@ final class PlayerService {
             // Use state.duration as fallback for quality switching when video.duration might be 0
             let effectiveDuration = video.duration > 0 ? video.duration : state.duration
             let completionThreshold = effectiveDuration * 0.9
-            // FORK (playback-sync): resume from the furthest of local progress
-            // and the position synced from the Invidious account. Using max()
-            // (not a local-first `??`) is what lets a position set on another
-            // device win even when this device already has a WatchEntry — e.g.
-            // one hydrated as "finished" with watchedSeconds 0 because Invidious
-            // marked the video watched on open. A truly-finished video's synced
-            // position sits past completionThreshold below, so it still replays.
-            // For online videos, block briefly to fetch the freshest server
-            // position so resume reflects another device on the very first open.
-            let syncedPosition: TimeInterval?
-            if case .global = video.id.source {
-                syncedPosition = await invidiousHistorySync?.freshPosition(for: video.id.videoID)
+            // FORK (playback-sync): when Invidious sync is enabled, the server
+            // is the source of truth for resume position — prefer it outright
+            // over local progress rather than merging the two, so a position
+            // set on another device always wins, even over a fresher local
+            // WatchEntry. Block briefly so the very first open on this device
+            // reflects another device's position immediately.
+            let localProgress = dataManager.watchProgress(for: video.id.videoID)
+            let savedProgress: TimeInterval?
+            if let invidiousHistorySync {
+                savedProgress = await invidiousHistorySync.resumePosition(for: video, localProgress: localProgress)
             } else {
-                syncedPosition = nil
+                savedProgress = localProgress
             }
-            let savedProgress = [
-                dataManager.watchProgress(for: video.id.videoID),
-                syncedPosition
-            ].compactMap { $0 }.max()
             LoggingService.shared.logPlayer("Replay check: savedProgress=\(savedProgress ?? -1), startTime=\(startTime ?? -1), duration=\(video.duration), threshold=\(completionThreshold)")
 
             if let startTime {

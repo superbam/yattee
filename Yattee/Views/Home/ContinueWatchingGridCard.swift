@@ -19,7 +19,10 @@ struct TappableContinueWatchingGridCard: View {
         ContinueWatchingGridCard(entry: entry)
             .tappableVideo(
                 video,
-                startTime: entry.watchedSeconds,
+                // Not forced to entry.watchedSeconds: let TappableVideoModifier
+                // resolve resume position itself (Invidious source of truth
+                // when sync is enabled, else this local value).
+                startTime: nil,
                 queueSource: .manual,
                 sourceLabel: String(localized: "queue.source.continueWatching")
             )

@@ -11,6 +11,16 @@ import SwiftData
 extension DataManager {
     // MARK: - Watch History
 
+    /// Pushes an unwatched state to the Invidious account for each deleted
+    /// entry that Invidious could have an opinion on (YouTube/global source
+    /// only — PeerTube, local-folder, and extracted-URL entries are skipped).
+    /// Call with entries captured *before* deletion. (playback-sync)
+    private func pushUnwatchedToInvidious(_ entries: [WatchEntry]) {
+        for entry in entries where entry.sourceRawValue == "global" && entry.globalProvider == "youtube" {
+            invidiousHistorySync?.markUnwatched(videoID: entry.videoID)
+        }
+    }
+
     /// Records or updates watch progress locally without triggering iCloud sync.
     /// Use this for frequent updates during playback to avoid unnecessary sync overhead.
     func updateWatchProgressLocal(for video: Video, seconds: TimeInterval, duration: TimeInterval? = nil) {
@@ -170,6 +180,7 @@ extension DataManager {
                 ))
             }
 
+            pushUnwatchedToInvidious(entries)
             entries.forEach { modelContext.delete($0) }
             save()
 
@@ -206,6 +217,7 @@ extension DataManager {
                 ))
             }
 
+            pushUnwatchedToInvidious(entries)
             entries.forEach { modelContext.delete($0) }
             save()
 
@@ -242,6 +254,7 @@ extension DataManager {
                 ))
             }
 
+            pushUnwatchedToInvidious(entries)
             entries.forEach { modelContext.delete($0) }
             save()
 
@@ -277,6 +290,7 @@ extension DataManager {
                 )
             }
 
+            pushUnwatchedToInvidious(entries)
             entries.forEach { modelContext.delete($0) }
             save()
 
@@ -328,6 +342,10 @@ extension DataManager {
             // Queue for CloudKit sync
             cloudKitSync?.queueWatchEntrySave(entry)
 
+            if entry.sourceRawValue == "global" && entry.globalProvider == "youtube" {
+                invidiousHistorySync?.markWatched(videoID: entry.videoID)
+            }
+
             NotificationCenter.default.post(name: .watchHistoryDidChange, object: nil)
         } catch {
             LoggingService.shared.logCloudKitError("Failed to mark as watched", error: error)
@@ -360,6 +378,7 @@ extension DataManager {
             }
 
             // Delete all entries
+            pushUnwatchedToInvidious(entries)
             entries.forEach { modelContext.delete($0) }
             save()
 

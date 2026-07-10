@@ -52,10 +52,15 @@ struct InstanceDetectionResult: Sendable {
     let type: InstanceType
     /// Whether this instance requires authentication (Basic Auth for Yattee Server).
     let requiresAuth: Bool
+    /// Whether this Invidious instance identified itself as running the
+    /// "shorts-filter" fork (`/api/v1/stats`'s `software.branch`). Always
+    /// false for non-Invidious types. (playback-sync)
+    let isShortsFilterFork: Bool
 
-    init(type: InstanceType, requiresAuth: Bool = false) {
+    init(type: InstanceType, requiresAuth: Bool = false, isShortsFilterFork: Bool = false) {
         self.type = type
         self.requiresAuth = requiresAuth
+        self.isShortsFilterFork = isShortsFilterFork
     }
 }
 
@@ -134,8 +139,9 @@ actor InstanceDetector {
         }
 
         do {
-            if try await isInvidious(url: url, extraHeaders: extraHeaders) {
-                return .success(InstanceDetectionResult(type: .invidious))
+            if let stats = try await detectInvidiousStats(url: url, extraHeaders: extraHeaders) {
+                let isShortsFilterFork = stats.software?.branch == "shorts-filter"
+                return .success(InstanceDetectionResult(type: .invidious, isShortsFilterFork: isShortsFilterFork))
             }
         } catch APIError.unauthorized {
             sawUnauthorized = true
@@ -255,19 +261,25 @@ actor InstanceDetector {
         }
     }
 
-    /// Checks if the instance is Invidious by calling /api/v1/stats.
-    /// Re-throws `APIError.unauthorized` so the caller can prompt for basic-auth credentials.
-    private func isInvidious(url: URL, extraHeaders: [String: String]? = nil) async throws -> Bool {
+    /// Checks if the instance is Invidious by calling /api/v1/stats, returning
+    /// the parsed stats (including the fork-identifying `branch` field) when
+    /// it is. Re-throws `APIError.unauthorized` so the caller can prompt for
+    /// basic-auth credentials.
+    private func detectInvidiousStats(
+        url: URL,
+        extraHeaders: [String: String]? = nil
+    ) async throws -> InstanceDetectorModels.InvidiousStats? {
         let endpoint = GenericEndpoint.get("/api/v1/stats")
 
         do {
             let response: InstanceDetectorModels.InvidiousStats = try await httpClient.fetch(endpoint, baseURL: url, customHeaders: extraHeaders)
             // Invidious stats has software.name = "invidious"
-            return response.software?.name?.lowercased() == "invidious"
+            guard response.software?.name?.lowercased() == "invidious" else { return nil }
+            return response
         } catch APIError.unauthorized {
             throw APIError.unauthorized
         } catch {
-            return false
+            return nil
         }
     }
 
@@ -354,6 +366,9 @@ enum InstanceDetectorModels {
         struct InvidiousSoftware: Sendable {
             let name: String?
             let version: String?
+            /// Git branch, e.g. "master" for stock Invidious or "shorts-filter"
+            /// for the fork this app has custom integrations for. (playback-sync)
+            let branch: String?
         }
     }
 
@@ -448,13 +463,14 @@ extension InstanceDetectorModels.InvidiousStats: Decodable {
 
 extension InstanceDetectorModels.InvidiousStats.InvidiousSoftware: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case name, version
+        case name, version, branch
     }
 
     nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decodeIfPresent(String.self, forKey: .name)
         version = try container.decodeIfPresent(String.self, forKey: .version)
+        branch = try container.decodeIfPresent(String.self, forKey: .branch)
     }
 }
 

@@ -240,11 +240,12 @@ struct VideoContextMenuContent: View {
         // Play (hidden in player context since video is already playing)
         if showPlayAction {
             Button {
-                if let startTime {
-                    appEnvironment?.playerService.openVideo(video, startTime: startTime)
-                } else {
-                    appEnvironment?.playerService.openVideo(video)
-                }
+                // Not startTime directly: that's a local resume hint used only
+                // to decide whether to show "Play from Beginning" below. Let
+                // PlayerService resolve the actual resume position so the
+                // Invidious server (source of truth when sync is enabled) can
+                // override a stale local value.
+                appEnvironment?.playerService.openVideo(video)
             } label: {
                 Label(String(localized: "video.context.play"), systemImage: "play.fill")
             }
@@ -322,6 +323,9 @@ struct VideoContextMenuContent: View {
         // Mark as Watched / Unwatched
         if !video.isFromLocalFolder {
             Button {
+                // DataManager pushes the Invidious-account equivalent itself
+                // (see DataManager+WatchHistory.swift), so this only needs the
+                // local call.
                 if isWatched {
                     appEnvironment?.dataManager.markAsUnwatched(videoID: video.id.videoID)
                 } else {
