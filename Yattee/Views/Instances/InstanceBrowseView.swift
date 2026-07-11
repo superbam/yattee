@@ -38,6 +38,13 @@ struct InstanceBrowseView: View {
     @State private var isLoadingMoreFeed = false
     @State private var contentLoadTask: Task<Void, Never>?
     @State private var feedLoadedVideoCount = 0  // Track count when last load was triggered
+
+    // Discover state (FORK-only, requires Invidious login)
+    @State private var discoverVideos: [Video] = []
+    @State private var discoverPage = 1
+    @State private var hasMoreDiscoverResults = true
+    @State private var isLoadingMoreDiscover = false
+    @State private var discoverLoadedVideoCount = 0
     
     // View options (persisted per instance)
     @AppStorage var layout: VideoListLayout
@@ -90,6 +97,7 @@ struct InstanceBrowseView: View {
         case trending
         case feed
         case playlists
+        case discover
 
         var id: String { rawValue }
 
@@ -99,6 +107,7 @@ struct InstanceBrowseView: View {
             case .trending: return String(localized: "trending.title")
             case .feed: return String(localized: "feed.title")
             case .playlists: return String(localized: "playlists.title")
+            case .discover: return String(localized: "discover.title")
             }
         }
 
@@ -108,6 +117,7 @@ struct InstanceBrowseView: View {
             case .trending: return "chart.line.uptrend.xyaxis"
             case .feed: return "person.crop.rectangle.stack"
             case .playlists: return "play.square.stack"
+            case .discover: return "sparkles"
             }
         }
     }
@@ -443,14 +453,18 @@ struct InstanceBrowseView: View {
     // MARK: - Computed Properties
 
     private var availableTabs: [BrowseTab] {
+        var tabs: [BrowseTab]
         if instance.supportsFeed && isLoggedIn {
             // Playlists tab only available for Invidious (Piped playlists to be added in future)
-            if instance.type == .invidious {
-                return [.feed, .popular, .trending, .playlists]
-            }
-            return [.feed, .popular, .trending]
+            tabs = instance.type == .invidious ? [.feed, .popular, .trending, .playlists] : [.feed, .popular, .trending]
+        } else {
+            tabs = [.popular, .trending]
         }
-        return [.popular, .trending]
+        // Discover requires being logged in and a confirmed shorts-filter fork instance.
+        if isLoggedIn && instance.supportsDiscover {
+            tabs.append(.discover)
+        }
+        return tabs
     }
 
     private var currentVideos: [Video] {
@@ -460,6 +474,7 @@ struct InstanceBrowseView: View {
         case .trending: videos = trendingVideos
         case .feed: videos = filteredFeedVideos
         case .playlists: videos = []  // Playlists tab doesn't show videos directly
+        case .discover: videos = discoverVideos
         }
         
         // Filter out watched videos if enabled
@@ -722,6 +737,16 @@ struct InstanceBrowseView: View {
                     loadMoreFeedResults()
                 }
             }
+
+            // Discover tab load more
+            if selectedTab == .discover {
+                LoadMoreTrigger(
+                    isLoading: isLoadingMoreDiscover,
+                    hasMore: hasMoreDiscoverResults && discoverVideos.count > discoverLoadedVideoCount
+                ) {
+                    loadMoreDiscoverResults()
+                }
+            }
         }
     }
     
@@ -752,11 +777,25 @@ struct InstanceBrowseView: View {
                         && feedVideos.count > feedLoadedVideoCount {
                         loadMoreFeedResults()
                     }
+                    // Infinite scroll for discover tab
+                    if selectedTab == .discover
+                        && index >= currentVideos.count - 3
+                        && hasMoreDiscoverResults
+                        && !isLoadingMoreDiscover
+                        && discoverVideos.count > discoverLoadedVideoCount {
+                        loadMoreDiscoverResults()
+                    }
                 }
             }
         }
 
         if selectedTab == .feed && isLoadingMoreFeed {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding()
+        }
+
+        if selectedTab == .discover && isLoadingMoreDiscover {
             ProgressView()
                 .frame(maxWidth: .infinity)
                 .padding()
@@ -1106,6 +1145,7 @@ struct InstanceBrowseView: View {
         case .trending: hasData = !trendingVideos.isEmpty
         case .feed: hasData = !feedVideos.isEmpty
         case .playlists: hasData = !userPlaylists.isEmpty
+        case .discover: hasData = !discoverVideos.isEmpty
         }
 
         if hasData && !forceRefresh {
@@ -1207,6 +1247,29 @@ struct InstanceBrowseView: View {
                 let api = InvidiousAPI(httpClient: appEnvironment.httpClient)
                 let playlists = try await api.userPlaylists(instance: instance, sid: credential)
                 userPlaylists = playlists
+            case .discover:
+                guard instance.supportsDiscover else {
+                    errorMessage = String(localized: "feed.error.notSupported")
+                    isLoading = false
+                    return
+                }
+
+                guard let sid = appEnvironment.invidiousCredentialsManager.sid(for: instance) else {
+                    errorMessage = String(localized: "feed.error.notLoggedIn")
+                    isLoading = false
+                    return
+                }
+
+                if forceRefresh {
+                    discoverPage = 1
+                    hasMoreDiscoverResults = true
+                }
+
+                let api = InvidiousAPI(httpClient: appEnvironment.httpClient)
+                let response = try await api.discover(instance: instance, sid: sid, page: discoverPage)
+                discoverVideos = response.videos
+                hasMoreDiscoverResults = response.hasMore
+                prefetchBranding(for: response.videos)
             }
         } catch is CancellationError {
             // Task was cancelled — another load is taking over, don't touch state
@@ -1313,6 +1376,34 @@ struct InstanceBrowseView: View {
             } catch {
                 await MainActor.run {
                     isLoadingMoreFeed = false
+                }
+            }
+        }
+    }
+
+    private func loadMoreDiscoverResults() {
+        guard hasMoreDiscoverResults, !isLoadingMoreDiscover, !isLoading else { return }
+        guard let appEnvironment,
+              let sid = appEnvironment.invidiousCredentialsManager.sid(for: instance) else { return }
+
+        isLoadingMoreDiscover = true
+        discoverLoadedVideoCount = discoverVideos.count  // Mark current count to prevent re-triggering
+        discoverPage += 1
+
+        Task {
+            do {
+                let api = InvidiousAPI(httpClient: appEnvironment.httpClient)
+                let response = try await api.discover(instance: instance, sid: sid, page: discoverPage)
+
+                await MainActor.run {
+                    discoverVideos.append(contentsOf: response.videos)
+                    hasMoreDiscoverResults = response.hasMore
+                    isLoadingMoreDiscover = false
+                    prefetchBranding(for: response.videos)
+                }
+            } catch {
+                await MainActor.run {
+                    isLoadingMoreDiscover = false
                 }
             }
         }

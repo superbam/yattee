@@ -204,6 +204,17 @@ extension Instance {
         type == .invidious && isShortsFilterFork != false
     }
 
+    /// Whether this instance's personalized Discover feed
+    /// (`/api/v1/auth/discover`) is available. Unlike
+    /// `likelySupportsPositionSync`, this gates a visible UI tab rather than
+    /// a silent background call, so it requires a *confirmed* fork detection
+    /// (`== true`) rather than "unknown, worth trying" — showing a tab that
+    /// immediately errors on stock/undetected instances is worse than
+    /// waiting one detection cycle for it to appear.
+    var supportsDiscover: Bool {
+        type == .invidious && isShortsFilterFork == true
+    }
+
     /// Whether this instance can sit behind an HTTP Basic Auth reverse proxy.
     /// Piped is excluded: its session token is sent in the same `Authorization`
     /// header that the proxy would consume, so logged-in features can't coexist

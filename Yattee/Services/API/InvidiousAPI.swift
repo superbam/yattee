@@ -488,6 +488,29 @@ actor InvidiousAPI: InstanceAPI {
         return InvidiousFeedResponse(videos: videos, hasMore: !videos.isEmpty)
     }
 
+    /// Fetches the personalized "Discover" feed for a logged-in user.
+    /// FORK-only: /api/v1/auth/discover doesn't exist on stock Invidious.
+    /// Ranks candidates pulled from the related-videos of recently-watched
+    /// videos by frequency/position, with subscription/popularity/recency as
+    /// secondary signals — entirely server-side, unlike `hasMore`.
+    /// - Parameters:
+    ///   - instance: The Invidious instance
+    ///   - sid: The session ID from login
+    ///   - page: Page number for pagination (1-based)
+    /// - Returns: Discover feed response with videos and hasMore flag
+    func discover(instance: Instance, sid: String, page: Int = 1) async throws -> InvidiousFeedResponse {
+        let endpoint = GenericEndpoint.get("/api/v1/auth/discover", query: [
+            "page": String(page)
+        ])
+        let response: InvidiousDiscoverResponse = try await httpClient.fetch(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+        let videos = response.videos.map { $0.toVideo(baseURL: instance.url) }
+        return InvidiousFeedResponse(videos: videos, hasMore: response.hasMore)
+    }
+
     /// Fetches the user's subscriptions.
     /// - Parameters:
     ///   - instance: The Invidious instance
@@ -856,6 +879,13 @@ private struct InvidiousAuthPlaylistVideo: Decodable, Sendable {
 private struct InvidiousAuthFeedResponse: Decodable, Sendable {
     let notifications: [InvidiousVideo]?
     let videos: [InvidiousVideo]
+}
+
+/// Response from the fork-only authenticated discover endpoint.
+/// Unlike the feed endpoint, hasMore is provided explicitly by the server.
+private struct InvidiousDiscoverResponse: Decodable, Sendable {
+    let videos: [InvidiousVideo]
+    let hasMore: Bool
 }
 
 private struct InvidiousVideo: Decodable, Sendable {
