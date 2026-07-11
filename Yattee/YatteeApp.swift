@@ -84,6 +84,15 @@ struct YatteeApp: App {
                 }
                 .onAppear {
                     registerBackgroundTasksIfNeeded()
+
+                    // FORK (sources-status): backfill fork detection on cold launch
+                    // instead of only while Settings > Sources is on screen, so
+                    // instances added before this check existed (isShortsFilterFork
+                    // == nil) get resolved without the user having to visit that
+                    // screen first. One sweep; refreshAll() no-ops cheaply per source.
+                    Task {
+                        await appEnvironment.sourceStatusRefresher.refreshAll()
+                    }
                     #if os(tvOS)
                     TopShelfSnapshotWriter.startObserving(dataManager: appEnvironment.dataManager)
                     TopShelfSnapshotWriter.writeAll(
