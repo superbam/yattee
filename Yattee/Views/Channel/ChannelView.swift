@@ -113,7 +113,7 @@ struct ChannelView: View {
     }
 
     private var accentColor: Color {
-        appEnvironment?.settingsManager.accentColor.color ?? .accentColor
+        appEnvironment?.settingsManager.resolvedAccentColor ?? .accentColor
     }
 
     // Grid layout configuration
@@ -144,18 +144,42 @@ struct ChannelView: View {
         showInsetBackground ? ListBackgroundStyle.grouped.color : ListBackgroundStyle.plain.color
     }
 
+    private var viewOptionsSheetContent: some View {
+        ViewOptionsSheet(
+            layout: $layout,
+            rowStyle: $rowStyle,
+            gridColumns: $gridColumns,
+            hideWatched: $hideWatched,
+            maxGridColumns: gridConfig.maxColumns
+        )
+    }
+
+    /// View options button lives on the leading edge on macOS, trailing elsewhere.
+    private var viewOptionsPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .navigation
+        #else
+        .primaryAction
+        #endif
+    }
+
     var body: some View {
-        Group {
-            if let channel {
-                channelContent(channel)
-            } else if let cachedHeader {
-                // Show header with cached data + spinner for content area
-                loadingContent(cachedHeader)
-            } else if isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let error = errorMessage {
-                errorView(error)
+        // The search modifier is hoisted above this state-switching Group so the
+        // search bar is present in every load state (loading spinner / cached header
+        // / loaded content) instead of only appearing once `channel != nil`.
+        channelSearchable {
+            Group {
+                if let channel {
+                    channelContent(channel)
+                } else if let cachedHeader {
+                    // Show header with cached data + spinner for content area
+                    loadingContent(cachedHeader)
+                } else if isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let error = errorMessage {
+                    errorView(error)
+                }
             }
         }
         .background(showInsetBackground ? viewBackgroundColor : .clear)
@@ -170,6 +194,63 @@ struct ChannelView: View {
         .onReceive(NotificationCenter.default.publisher(for: .watchHistoryDidChange)) { _ in
             loadWatchEntries()
         }
+    }
+
+    /// Applies the channel `.searchable` field and its search handlers around the given
+    /// content. Kept outside `iOSChannelContent` so the search bar shows regardless of
+    /// channel load state. On tvOS there is no `.searchable` (it uses a custom search
+    /// tab), so this is a passthrough.
+    @ViewBuilder
+    private func channelSearchable(@ViewBuilder _ content: () -> some View) -> some View {
+        #if os(tvOS)
+        content()
+        #else
+        content()
+            #if os(iOS)
+            .if(supportsChannelSearch) { view in
+                // iPhone: search bar drawer in the navigation area (header reserves
+                // space for it). iPad: toolbar search button — the drawer would add
+                // a resting scroll position above the banner, letting the view
+                // scroll past the banner top.
+                view.searchable(
+                    text: $searchText,
+                    isPresented: $isSearchActive,
+                    placement: horizontalSizeClass == .compact
+                        ? .navigationBarDrawer(displayMode: .automatic)
+                        : .toolbar,
+                    prompt: Text("channel.search.placeholder")
+                )
+            }
+            #elseif os(macOS)
+            .if(supportsChannelSearch) { view in
+                view.searchable(
+                    text: $searchText,
+                    isPresented: $isSearchActive,
+                    placement: .toolbar,
+                    prompt: Text("channel.search.placeholder")
+                )
+            }
+            #endif
+            .onSubmit(of: .search) {
+                Task {
+                    await performSearch()
+                }
+            }
+            .onChange(of: searchText) { _, newValue in
+                if newValue.isEmpty && isSearchActive {
+                    // User cleared the search text, reset search state
+                    searchResults = .empty
+                }
+            }
+            .onChange(of: isSearchActive) { _, isActive in
+                if !isActive {
+                    // Search was dismissed, clear results
+                    hasSearched = false
+                    searchResults = .empty
+                    searchText = ""
+                }
+            }
+        #endif
     }
 
     private func loadWatchEntries() {
@@ -232,6 +313,14 @@ struct ChannelView: View {
                                 .id("channelTop")
 
                             // Content based on instance type
+                            // On macOS the content type picker lives in the toolbar instead.
+                            #if os(macOS)
+                            // Breathing room between the banner and the content below.
+                            Color.clear.frame(height: 16)
+                            if !supportsChannelTabs {
+                                channelDescription(channel)
+                            }
+                            #else
                             if supportsChannelTabs {
                                 // Pill-style content type switcher
                                 contentTypePicker
@@ -241,6 +330,7 @@ struct ChannelView: View {
                                 // Non-tab instances: show description
                                 channelDescription(channel)
                             }
+                            #endif
                         }
 
                         // Tab content or search results
@@ -284,6 +374,12 @@ struct ChannelView: View {
         }
         .background(viewBackgroundColor)
         .ignoresSafeArea(edges: .top)
+        .softTopScrollEdgeEffect()
+        #if os(macOS)
+        .overlay(alignment: .top) {
+            legacyToolbarScrim
+        }
+        #endif
         .animation(.easeInOut(duration: 0.25), value: isSearchActive)
         .modifier(ChannelScrollOffsetModifier(
             scrollOffset: $scrollOffset,
@@ -291,8 +387,17 @@ struct ChannelView: View {
         ))
         .toolbar {
             #if os(macOS)
-            ToolbarItem(placement: .principal) {
-                collapsedToolbarTitle(name: channel.name, thumbnailURL: channel.thumbnailURL)
+            // Keep the content picker in the center `.principal` slot even while
+            // searching. Its presence is what pins the trailing `.searchable`
+            // field to the right edge — dropping it (or making it zero-width)
+            // lets the search field re-center. During search it's disabled so the
+            // user can't switch tabs while the content area shows search results.
+            if supportsChannelTabs {
+                ToolbarItem(placement: .principal) {
+                    contentTypePicker
+                        .fixedSize()
+                        .disabled(isSearchActive && hasSearched)
+                }
             }
             #else
             ToolbarItem(placement: .principal) {
@@ -321,17 +426,41 @@ struct ChannelView: View {
             }
             #endif
 
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem(placement: viewOptionsPlacement) {
                 Button {
                     showViewOptions = true
                 } label: {
                     Label(String(localized: "viewOptions.title"), systemImage: "slider.horizontal.3")
                 }
                 .liquidGlassTransitionSource(id: "channelViewOptions", in: sheetTransition)
+                #if os(macOS)
+                .popover(isPresented: $showViewOptions, arrowEdge: .bottom) {
+                    viewOptionsSheetContent
+                }
+                #endif
             }
 
-            #if !os(tvOS)
-            if #available(iOS 26, macOS 26, *) {
+            // macOS: channel avatar + name sit on the leading edge, next to view
+            // options. Excluded from the shared glass background so the view
+            // options button keeps its own capsule and the title renders plain.
+            #if os(macOS)
+            if #available(macOS 26, *) {
+                ToolbarItem(placement: .navigation) {
+                    collapsedToolbarTitle(name: channel.name, thumbnailURL: channel.thumbnailURL)
+                }
+                .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .navigation) {
+                    collapsedToolbarTitle(name: channel.name, thumbnailURL: channel.thumbnailURL)
+                }
+            }
+            #endif
+
+            // iOS keeps a fixed gap between the trailing view options and channel
+            // menu buttons; on macOS view options moves to the leading edge, so no
+            // gap is needed here.
+            #if os(iOS)
+            if #available(iOS 26, *) {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
             #endif
@@ -340,58 +469,16 @@ struct ChannelView: View {
                 channelMenu
             }
         }
+        #if !os(macOS)
         .sheet(isPresented: $showViewOptions) {
-            ViewOptionsSheet(
-                layout: $layout,
-                rowStyle: $rowStyle,
-                gridColumns: $gridColumns,
-                hideWatched: $hideWatched,
-                maxGridColumns: gridConfig.maxColumns
-            )
-            .liquidGlassSheetContent(sourceID: "channelViewOptions", in: sheetTransition)
+            viewOptionsSheetContent
+                .liquidGlassSheetContent(sourceID: "channelViewOptions", in: sheetTransition)
         }
+        #endif
         #if os(iOS)
         .toolbarBackground(collapseProgress > 0.8 ? .visible : .hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        #if os(iOS)
-        .if(supportsChannelSearch) { view in
-            view.searchable(
-                text: $searchText,
-                isPresented: $isSearchActive,
-                placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: Text("channel.search.placeholder")
-            )
-        }
-        #elseif os(macOS)
-        .if(supportsChannelSearch) { view in
-            view.searchable(
-                text: $searchText,
-                isPresented: $isSearchActive,
-                placement: .toolbar,
-                prompt: Text("channel.search.placeholder")
-            )
-        }
-        #endif
-        .onSubmit(of: .search) {
-            Task {
-                await performSearch()
-            }
-        }
-        .onChange(of: searchText) { _, newValue in
-            if newValue.isEmpty && isSearchActive {
-                // User cleared the search text, reset search state
-                searchResults = .empty
-            }
-        }
-        .onChange(of: isSearchActive) { _, isActive in
-            if !isActive {
-                // Search was dismissed, clear results
-                hasSearched = false
-                searchResults = .empty
-                searchText = ""
-            }
-        }
         .confirmationDialog(
             String(localized: "channel.unsubscribe.confirmation.title"),
             isPresented: $showingUnsubscribeConfirmation,
@@ -430,11 +517,16 @@ struct ChannelView: View {
                         .id("channelTop")
 
                     // Show tab picker during loading (doesn't depend on channel)
+                    // On macOS the content type picker lives in the toolbar instead.
+                    #if os(macOS)
+                    Color.clear.frame(height: 16)
+                    #else
                     if supportsChannelTabs {
                         contentTypePicker
                             .padding(.horizontal)
                             .padding(.vertical, 8)
                     }
+                    #endif
 
                     // Centered spinner for content area below tabs
                     ProgressView()
@@ -448,10 +540,19 @@ struct ChannelView: View {
         }
         .background(viewBackgroundColor)
         .ignoresSafeArea(edges: .top)
+        .softTopScrollEdgeEffect()
+        #if os(macOS)
+        .overlay(alignment: .top) {
+            legacyToolbarScrim
+        }
+        #endif
         .toolbar {
             #if os(macOS)
-            ToolbarItem(placement: .principal) {
-                collapsedToolbarTitle(name: cached.name, thumbnailURL: cached.thumbnailURL)
+            if supportsChannelTabs {
+                ToolbarItem(placement: .principal) {
+                    contentTypePicker
+                        .fixedSize()
+                }
             }
             #else
             ToolbarItem(placement: .principal) {
@@ -480,17 +581,41 @@ struct ChannelView: View {
             }
             #endif
 
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem(placement: viewOptionsPlacement) {
                 Button {
                     showViewOptions = true
                 } label: {
                     Label(String(localized: "viewOptions.title"), systemImage: "slider.horizontal.3")
                 }
                 .liquidGlassTransitionSource(id: "channelViewOptions", in: sheetTransition)
+                #if os(macOS)
+                .popover(isPresented: $showViewOptions, arrowEdge: .bottom) {
+                    viewOptionsSheetContent
+                }
+                #endif
             }
 
-            #if !os(tvOS)
-            if #available(iOS 26, macOS 26, *) {
+            // macOS: channel avatar + name sit on the leading edge, next to view
+            // options. Excluded from the shared glass background so the view
+            // options button keeps its own capsule and the title renders plain.
+            #if os(macOS)
+            if #available(macOS 26, *) {
+                ToolbarItem(placement: .navigation) {
+                    collapsedToolbarTitle(name: cached.name, thumbnailURL: cached.thumbnailURL)
+                }
+                .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .navigation) {
+                    collapsedToolbarTitle(name: cached.name, thumbnailURL: cached.thumbnailURL)
+                }
+            }
+            #endif
+
+            // iOS keeps a fixed gap between the trailing view options and channel
+            // menu buttons; on macOS view options moves to the leading edge, so no
+            // gap is needed here.
+            #if os(iOS)
+            if #available(iOS 26, *) {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
             #endif
@@ -499,16 +624,12 @@ struct ChannelView: View {
                 channelMenu
             }
         }
+        #if !os(macOS)
         .sheet(isPresented: $showViewOptions) {
-            ViewOptionsSheet(
-                layout: $layout,
-                rowStyle: $rowStyle,
-                gridColumns: $gridColumns,
-                hideWatched: $hideWatched,
-                maxGridColumns: gridConfig.maxColumns
-            )
-            .liquidGlassSheetContent(sourceID: "channelViewOptions", in: sheetTransition)
+            viewOptionsSheetContent
+                .liquidGlassSheetContent(sourceID: "channelViewOptions", in: sheetTransition)
         }
+        #endif
         #if os(iOS)
         .toolbarBackground(collapseProgress > 0.8 ? .visible : .hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
@@ -820,8 +941,31 @@ struct ChannelView: View {
     // MARK: - Header
 
     #if os(macOS)
+    /// Pre-macOS 26 has no Liquid Glass toolbar capsules, so toolbar items sit
+    /// directly on the banner/scrolled content. A fixed window-background scrim
+    /// at the top keeps them legible in both appearances.
+    @ViewBuilder
+    private var legacyToolbarScrim: some View {
+        if #unavailable(macOS 26) {
+            LinearGradient(
+                stops: [
+                    .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.9), location: 0),
+                    .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.75), location: 0.5),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 100)
+            .frame(maxWidth: .infinity)
+            .allowsHitTesting(false)
+            .ignoresSafeArea(edges: .top)
+        }
+    }
+
+    @ViewBuilder
     private func collapsedToolbarTitle(name: String, thumbnailURL: URL?) -> some View {
-        HStack(spacing: 8) {
+        let label = HStack(spacing: 8) {
             LazyImage(url: thumbnailURL) { state in
                 if let image = state.image {
                     image
@@ -840,6 +984,16 @@ struct ChannelView: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, 10)
+
+        // Own glass capsule; the toolbar item opts out of the shared background
+        // so this doesn't merge with the view options button.
+        if #available(macOS 26, *) {
+            label
+                .padding(.vertical, 5)
+                .glassEffect()
+        } else {
+            label
+        }
     }
     #endif
 
@@ -1020,9 +1174,10 @@ struct ChannelView: View {
     /// Icon for the channel menu based on subscription/notification state
     private var channelMenuIcon: String {
         if isSubscribed {
-            let notificationsEnabled = channel.map {
-                appEnvironment?.dataManager.notificationsEnabled(for: $0.id.channelID) ?? false
-            } ?? false
+            // Use the immediately-available channel ID so notification status is correct
+            // during loading, before the network-loaded `channel` is set.
+            let effectiveChannelID = channel?.id.channelID ?? channelID
+            let notificationsEnabled = appEnvironment?.dataManager.notificationsEnabled(for: effectiveChannelID) ?? false
             return notificationsEnabled ? "bell.fill" : "person.fill"
         }
         return "person.badge.plus"
@@ -1044,8 +1199,9 @@ struct ChannelView: View {
             }
 
             // Notifications toggle (only visible when subscribed)
-            if isSubscribed, let channel {
-                let notificationsEnabled = appEnvironment?.dataManager.notificationsEnabled(for: channel.id.channelID) ?? false
+            if isSubscribed {
+                let effectiveChannelID = channel?.id.channelID ?? channelID
+                let notificationsEnabled = appEnvironment?.dataManager.notificationsEnabled(for: effectiveChannelID) ?? false
                 Button {
                     toggleNotifications()
                 } label: {

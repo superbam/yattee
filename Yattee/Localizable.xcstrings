@@ -10,6 +10,9 @@
     "·" : {
 
     },
+    "#RRGGBB" : {
+
+    },
     "%@" : {
 
     },
@@ -1390,6 +1393,16 @@
         }
       }
     },
+    "controls.button.audioMode" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio Mode"
+          }
+        }
+      }
+    },
     "controls.button.autoPlayNext" : {
       "localizations" : {
         "en" : {
@@ -1466,6 +1479,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fullscreen"
+          }
+        }
+      }
+    },
+    "controls.button.keepOnTop" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep on Top"
           }
         }
       }
@@ -1846,6 +1869,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plain"
+          }
+        }
+      }
+    },
+    "controls.theme.auto" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Auto"
           }
         }
       }
@@ -2278,6 +2312,17 @@
         }
       }
     },
+    "downloads.cancel" : {
+      "comment" : "Cancel in-progress download context menu item",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel Download"
+          }
+        }
+      }
+    },
     "downloads.delete" : {
       "localizations" : {
         "en" : {
@@ -2332,6 +2377,17 @@
         }
       }
     },
+    "downloads.pause" : {
+      "comment" : "Pause download context menu item",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause"
+          }
+        }
+      }
+    },
     "downloads.retry" : {
       "comment" : "Retry failed download button",
       "localizations" : {
@@ -2339,6 +2395,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Retry"
+          }
+        }
+      }
+    },
+    "downloads.resume" : {
+      "comment" : "Resume paused download context menu item",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume"
           }
         }
       }
@@ -3715,6 +3782,17 @@
         }
       }
     },
+    "home.editShortcuts" : {
+      "comment" : "Context menu action on Home shortcuts to open Home settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Shortcuts"
+          }
+        }
+      }
+    },
     "home.empty.description" : {
       "comment" : "Library tab placeholder description",
       "localizations" : {
@@ -3722,6 +3800,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your video playlists will appear here."
+          }
+        }
+      }
+    },
+    "home.hideShortcut" : {
+      "comment" : "Context menu action on Home shortcuts to hide the shortcut",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide"
           }
         }
       }
@@ -4189,6 +4278,17 @@
         }
       }
     },
+    "home.settings.shortcuts.color" : {
+      "comment" : "Label/header for the card color emphasis picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Color"
+          }
+        }
+      }
+    },
     "home.settings.shortcuts.header" : {
       "comment" : "Header for shortcuts section in library settings",
       "localizations" : {
@@ -4207,6 +4307,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Layout"
+          }
+        }
+      }
+    },
+    "home.settings.shortcuts.palette" : {
+      "comment" : "Label/header for the colorful palette picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Palette"
+          }
+        }
+      }
+    },
+    "home.settings.shortcuts.style" : {
+      "comment" : "Label for shortcuts card style picker in library settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Style"
+          }
+        }
+      }
+    },
+    "home.settings.shortcuts.style.preview" : {
+      "comment" : "Header for the shortcut style preview section",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview"
           }
         }
       }
@@ -4324,6 +4457,28 @@
         }
       }
     },
+    "home.shortcuts.color.soft" : {
+      "comment" : "Soft card color option (tinted background)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soft"
+          }
+        }
+      }
+    },
+    "home.shortcuts.color.vibrant" : {
+      "comment" : "Vibrant card color option (solid fill)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vibrant"
+          }
+        }
+      }
+    },
     "home.shortcuts.layout.cards" : {
       "comment" : "Cards layout option for library shortcuts",
       "localizations" : {
@@ -4342,6 +4497,182 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "List"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.accent" : {
+      "comment" : "Palette name for the uniform accent-color fill",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accent"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.berry" : {
+      "comment" : "Colorful palette name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Berry"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.classic" : {
+      "comment" : "Colorful palette name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Classic"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.custom" : {
+      "comment" : "Colorful palette name for the user-defined palette",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.custom.add" : {
+      "comment" : "Button to add a color to the custom palette",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Color"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.custom.footer" : {
+      "comment" : "Footer explaining the custom palette editor",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Colors are applied to cards by position and repeat once the list runs out."
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.custom.header" : {
+      "comment" : "Header for the custom palette editor section",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom Colors"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.custom.mode" : {
+      "comment" : "Accessibility label for the custom palette edit-mode picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Mode"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.custom.mode.list" : {
+      "comment" : "Custom palette edit mode: swatch list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "List"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.custom.mode.text" : {
+      "comment" : "Custom palette edit mode: raw text",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.custom.placeholder" : {
+      "comment" : "Placeholder for the custom palette hex text field",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#FF6B6B, #4D96FF, #6BCB77"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.grape" : {
+      "comment" : "Colorful palette name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grape"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.meadow" : {
+      "comment" : "Colorful palette name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meadow"
+          }
+        }
+      }
+    },
+    "home.shortcuts.palette.sunset" : {
+      "comment" : "Colorful palette name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sunset"
+          }
+        }
+      }
+    },
+    "home.shortcuts.style.compact" : {
+      "comment" : "Compact card style option",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compact"
+          }
+        }
+      }
+    },
+    "home.shortcuts.style.regular" : {
+      "comment" : "Regular card style option",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regular"
           }
         }
       }
@@ -5232,6 +5563,7 @@
       }
     },
     "mediaSources.browse %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5471,42 +5803,22 @@
         }
       }
     },
-    "menu.playback.seekBackward10" : {
+    "menu.playback.seekBackward %lld" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Seek Back 10s"
+            "value" : "Seek Back %llds"
           }
         }
       }
     },
-    "menu.playback.seekBackward30" : {
+    "menu.playback.seekForward %lld" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Seek Back 30s"
-          }
-        }
-      }
-    },
-    "menu.playback.seekForward10" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Seek Forward 10s"
-          }
-        }
-      }
-    },
-    "menu.playback.seekForward30" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Seek Forward 30s"
+            "value" : "Seek Forward %llds"
           }
         }
       }
@@ -5551,8 +5863,159 @@
         }
       }
     },
+    "migration.accounts.addSourcesFooter" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review accounts from the previous Yattee app and sign in again to add their sources."
+          }
+        }
+      }
+    },
+    "migration.accounts.addSourcesLink" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import Legacy Accounts"
+          }
+        }
+      }
+    },
+    "migration.accounts.empty.description" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All legacy accounts have been imported or removed."
+          }
+        }
+      }
+    },
+    "migration.accounts.empty.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Legacy Accounts"
+          }
+        }
+      }
+    },
+    "migration.accounts.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter your current password to sign in again. Importing creates or reuses the matching source."
+          }
+        }
+      }
+    },
+    "migration.accounts.imported.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account Imported"
+          }
+        }
+      }
+    },
+    "migration.accounts.prompt.later" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not Now"
+          }
+        }
+      }
+    },
+    "migration.accounts.prompt.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yattee found accounts and sources from the previous app. Review them to sign in again or add them, or remove anything you do not want to import."
+          }
+        }
+      }
+    },
+    "migration.accounts.prompt.review" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review"
+          }
+        }
+      }
+    },
+    "migration.accounts.prompt.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import from Previous App"
+          }
+        }
+      }
+    },
+    "migration.accounts.remove.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove"
+          }
+        }
+      }
+    },
+    "migration.accounts.remove.message %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This will remove \"%@\" from the legacy import list. It will not be imported."
+          }
+        }
+      }
+    },
+    "migration.accounts.remove.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove Legacy Account?"
+          }
+        }
+      }
+    },
+    "migration.accounts.section" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accounts"
+          }
+        }
+      }
+    },
+    "migration.accounts.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legacy Accounts"
+          }
+        }
+      }
+    },
     "migration.accountsHint" : {
       "comment" : "Hint about needing to re-add accounts after migration",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5563,6 +6026,7 @@
       }
     },
     "migration.continue" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5573,6 +6037,7 @@
       }
     },
     "migration.error.invalidURL" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5583,6 +6048,7 @@
       }
     },
     "migration.failedItems" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5614,6 +6080,7 @@
     },
     "migration.noDataFound" : {
       "comment" : "Title when no legacy data found",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5625,6 +6092,7 @@
     },
     "migration.noDataFoundDescription" : {
       "comment" : "Description when no legacy data found",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5636,6 +6104,7 @@
     },
     "migration.partialMessage %lld %lld" : {
       "comment" : "Import result count",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5646,6 +6115,7 @@
       }
     },
     "migration.partialTitle" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5656,6 +6126,7 @@
       }
     },
     "migration.retry" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5666,6 +6137,7 @@
       }
     },
     "migration.selectToImport" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5677,6 +6149,7 @@
     },
     "migration.settingsFooter" : {
       "comment" : "Footer text in settings migration view",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5693,6 +6166,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Skip"
+          }
+        }
+      }
+    },
+    "migration.sources.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add these sources from the previous Yattee app. No sign-in is required."
+          }
+        }
+      }
+    },
+    "migration.sources.imported.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Source Added"
+          }
+        }
+      }
+    },
+    "migration.sources.remove.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove Legacy Source?"
+          }
+        }
+      }
+    },
+    "migration.sources.section" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sources"
           }
         }
       }
@@ -5720,6 +6233,7 @@
       }
     },
     "migration.unreachableImport" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5730,6 +6244,7 @@
       }
     },
     "migration.unreachableMessage" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5740,6 +6255,7 @@
       }
     },
     "migration.unreachableTitle" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6830,6 +7346,17 @@
         }
       }
     },
+    "player.controls.keepOnTop" : {
+      "comment" : "Toggles whether the player window floats above other windows",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep on Top"
+          }
+        }
+      }
+    },
     "player.controls.pause" : {
       "localizations" : {
         "en" : {
@@ -7189,6 +7716,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "From video"
+          }
+        }
+      }
+    },
+    "player.quality.audioMode" : {
+      "comment" : "Audio-only (music) mode toggle in the player settings sheet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio Mode"
           }
         }
       }
@@ -8812,6 +9350,7 @@
     },
     "settings.advanced.data.importLegacy" : {
       "comment" : "Button label for importing legacy v1 data",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9891,6 +10430,26 @@
         }
       }
     },
+    "settings.appearance.accentColor.custom" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom"
+          }
+        }
+      }
+    },
+    "settings.appearance.accentColor.dark" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dark"
+          }
+        }
+      }
+    },
     "settings.appearance.accentColor.default" : {
       "localizations" : {
         "en" : {
@@ -9923,6 +10482,16 @@
     },
     "settings.appearance.accentColor.indigo" : {
 
+    },
+    "settings.appearance.accentColor.light" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Light"
+          }
+        }
+      }
     },
     "settings.appearance.accentColor.orange" : {
       "localizations" : {
@@ -9960,6 +10529,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Red"
+          }
+        }
+      }
+    },
+    "settings.appearance.accentColor.separateColors" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use separate light & dark colors"
           }
         }
       }
@@ -12014,16 +12593,6 @@
         }
       }
     },
-    "settings.playback.dash" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enable DASH"
-          }
-        }
-      }
-    },
     "settings.playback.macOS.autoResizePlayer" : {
       "comment" : "Toggle for automatically resizing player window to match video aspect ratio",
       "localizations" : {
@@ -12047,46 +12616,13 @@
         }
       }
     },
-    "settings.playback.macOS.playerMode" : {
-      "comment" : "macOS player mode setting",
+    "settings.playback.macOS.separateWindow" : {
+      "comment" : "Toggle: play the expanded video in a separate window vs. an inline sheet",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Player Mode"
-          }
-        }
-      }
-    },
-    "settings.playback.macOS.playerMode.floatingWindow" : {
-      "comment" : "Floating window player mode - stays on top of other windows",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Floating Window"
-          }
-        }
-      }
-    },
-    "settings.playback.macOS.playerMode.inline" : {
-      "comment" : "Inline (sheet) player mode",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inline (Sheet)"
-          }
-        }
-      }
-    },
-    "settings.playback.macOS.playerMode.window" : {
-      "comment" : "Separate window player mode",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Separate Window"
+            "value" : "Play in a separate window"
           }
         }
       }
@@ -12395,6 +12931,68 @@
         }
       }
     },
+    "settings.playback.tvAudioDelay" : {
+      "comment" : "Audio delay stepper label (tvOS only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio Delay"
+          }
+        }
+      }
+    },
+    "settings.playback.tvAudioDelay.minus10" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−10 ms"
+          }
+        }
+      }
+    },
+    "settings.playback.tvAudioDelay.minus100" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−100 ms"
+          }
+        }
+      }
+    },
+    "settings.playback.tvAudioDelay.plus10" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+10 ms"
+          }
+        }
+      }
+    },
+    "settings.playback.tvAudioDelay.plus100" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+100 ms"
+          }
+        }
+      }
+    },
+    "settings.playback.tvAudioDelay.reset" : {
+      "comment" : "Reset audio delay button label (tvOS only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset"
+          }
+        }
+      }
+    },
     "settings.playback.tvDisplayMatching.dynamicRange" : {
       "comment" : "Toggle label (tvOS only)",
       "localizations" : {
@@ -12453,6 +13051,78 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "When enabled, the Siri remote Menu button stops playback and clears the queue. The close (X) button is hidden from the player. When disabled, Menu collapses the player and playback continues in the background."
+          }
+        }
+      }
+    },
+    "settings.playback.tvSyncDiagnostics.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio Delay shifts audio relative to video to compensate for fixed HDMI/AVR output lag (positive = audio later). Video Sync Mode changes how MPV reconciles video frames with display refresh; the default is recommended unless you are debugging."
+          }
+        }
+      }
+    },
+    "settings.playback.tvSyncDiagnostics.header" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A/V Sync Diagnostics"
+          }
+        }
+      }
+    },
+    "settings.playback.tvSyncDiagnostics.row" : {
+      "comment" : "Advanced settings navigation row label (tvOS only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A/V Sync"
+          }
+        }
+      }
+    },
+    "settings.playback.tvVideoSyncMode" : {
+      "comment" : "Picker label (tvOS only)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Video Sync Mode"
+          }
+        }
+      }
+    },
+    "settings.playback.tvVideoSyncMode.audio" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio (video adapts)"
+          }
+        }
+      }
+    },
+    "settings.playback.tvVideoSyncMode.displayResample" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Display (resample audio)"
+          }
+        }
+      }
+    },
+    "settings.playback.tvVideoSyncMode.displayVdrop" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Display (drop/repeat) — default"
           }
         }
       }
@@ -12687,6 +13357,28 @@
         }
       }
     },
+    "settings.playerControls.center.secondarySeekBackwardTime" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Secondary Seek Time"
+          }
+        }
+      }
+    },
+    "settings.playerControls.center.secondarySeekForwardTime" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Secondary Seek Time"
+          }
+        }
+      }
+    },
     "settings.playerControls.center.seekBackward" : {
       "localizations" : {
         "en" : {
@@ -12703,6 +13395,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Seek Time"
+          }
+        }
+      }
+    },
+    "settings.playerControls.center.seekDurationsFooter" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Seek durations are used by the ← and → keyboard shortcuts and by seek buttons added to the player. Hold ⇧ Shift with ← or → to seek by the secondary durations."
           }
         }
       }
@@ -12787,6 +13490,17 @@
         }
       }
     },
+    "settings.playerControls.controlBar" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Control Bar"
+          }
+        }
+      }
+    },
     "settings.playerControls.create" : {
       "localizations" : {
         "en" : {
@@ -12853,6 +13567,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Font Style"
+          }
+        }
+      }
+    },
+    "settings.playerControls.glassBackground" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Glass Background"
           }
         }
       }
@@ -12993,6 +13718,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "New Preset"
+          }
+        }
+      }
+    },
+    "settings.playerControls.noButtonSettings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This button has no additional settings."
           }
         }
       }
@@ -13213,6 +13948,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Seconds"
+          }
+        }
+      }
+    },
+    "settings.playerControls.seekDurations" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Seek Durations"
           }
         }
       }
@@ -15019,26 +15765,6 @@
         }
       }
     },
-    "sources.bandwidth.download %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Download: %@"
-          }
-        }
-      }
-    },
-    "sources.bandwidth.upload %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Upload: %@"
-          }
-        }
-      }
-    },
     "sources.browsePeerTube" : {
       "comment" : "Menu item to browse PeerTube instances",
       "localizations" : {
@@ -16028,17 +16754,6 @@
         }
       }
     },
-    "sources.status.connected" : {
-      "comment" : "Status when connected",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connected"
-          }
-        }
-      }
-    },
     "sources.status.disabled" : {
       "comment" : "Status when source is disabled",
       "localizations" : {
@@ -16057,39 +16772,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Offline"
-          }
-        }
-      }
-    },
-    "sources.status.readOnly" : {
-      "comment" : "Status when source is read-only",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Read-only access"
-          }
-        }
-      }
-    },
-    "sources.test.success" : {
-      "comment" : "Test connection success message",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connected successfully"
-          }
-        }
-      }
-    },
-    "sources.testConnection" : {
-      "comment" : "Button to test connection",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Test Connection"
           }
         }
       }

@@ -21,11 +21,30 @@ struct MediaBrowserViewOptionsSheet: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        // Popover content: no navigation chrome, click-outside dismisses.
+        formContent
+            .formStyle(.grouped)
+            .frame(width: 300)
+            .onAppear {
+                // Reset sort order if current selection is not available for this source type
+                if !availableSortOptions.contains(sortOrder) {
+                    sortOrder = .name
+                }
+            }
+        #else
         NavigationStack {
             #if os(tvOS)
             listContent
             #else
             formContent
+                .navigationTitle("mediaBrowser.viewOptions.title")
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .toolbar {
+                    sheetCloseToolbarItem { dismiss() }
+                }
             #endif
         }
         #if os(iOS)
@@ -33,15 +52,13 @@ struct MediaBrowserViewOptionsSheet: View {
         .presentationDragIndicator(.visible)
         .presentationBackground(.thickMaterial)
         #endif
-        #if os(macOS)
-        .frame(minWidth: 420, minHeight: 320)
-        #endif
         .onAppear {
             // Reset sort order if current selection is not available for this source type
             if !availableSortOptions.contains(sortOrder) {
                 sortOrder = .name
             }
         }
+        #endif
     }
 
     @ViewBuilder
@@ -82,20 +99,6 @@ struct MediaBrowserViewOptionsSheet: View {
         Form {
             Section {
                 sharedOptions
-            }
-        }
-        .navigationTitle("mediaBrowser.viewOptions.title")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(role: .cancel) {
-                    dismiss()
-                } label: {
-                    Label(String(localized: "common.close"), systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                }
             }
         }
     }

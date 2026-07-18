@@ -82,6 +82,25 @@ struct BookmarksListView: View {
         return ([], nil)
     }
 
+    private var viewOptionsSheetContent: some View {
+        ViewOptionsSheet(
+            layout: $layout,
+            rowStyle: $rowStyle,
+            gridColumns: $gridColumns,
+            hideWatched: $hideWatched,
+            maxGridColumns: gridConfig.maxColumns
+        )
+    }
+
+    /// View options button lives on the leading edge on macOS, trailing elsewhere.
+    private var viewOptionsPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .navigation
+        #else
+        .primaryAction
+        #endif
+    }
+
     var body: some View {
         GeometryReader { geometry in
             #if os(tvOS)
@@ -143,26 +162,34 @@ struct BookmarksListView: View {
         .toolbarTitleDisplayMode(.inlineLarge)
         .searchable(text: $searchText, prompt: Text(String(localized: "bookmarks.search.placeholder")))
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            #if os(macOS)
+            // Pin the trailing group (search field + toolbar buttons) to the right edge,
+            // matching the global Search view.
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.flexible, placement: .primaryAction)
+            }
+            #endif
+            ToolbarItem(placement: viewOptionsPlacement) {
                 Button {
                     showViewOptions = true
                 } label: {
                     Label(String(localized: "viewOptions.title"), systemImage: "slider.horizontal.3")
                 }
                 .liquidGlassTransitionSource(id: "bookmarksViewOptions", in: sheetTransition)
+                #if os(macOS)
+                .popover(isPresented: $showViewOptions, arrowEdge: .bottom) {
+                    viewOptionsSheetContent
+                }
+                #endif
             }
         }
         #endif
+        #if !os(macOS)
         .sheet(isPresented: $showViewOptions) {
-            ViewOptionsSheet(
-                layout: $layout,
-                rowStyle: $rowStyle,
-                gridColumns: $gridColumns,
-                hideWatched: $hideWatched,
-                maxGridColumns: gridConfig.maxColumns
-            )
-            .liquidGlassSheetContent(sourceID: "bookmarksViewOptions", in: sheetTransition)
+            viewOptionsSheetContent
+                .liquidGlassSheetContent(sourceID: "bookmarksViewOptions", in: sheetTransition)
         }
+        #endif
         .onAppear {
             loadBookmarks()
             loadWatchEntries()

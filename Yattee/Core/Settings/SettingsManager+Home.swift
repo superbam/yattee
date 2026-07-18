@@ -95,6 +95,71 @@ extension SettingsManager {
         }
     }
 
+    /// Layout for home shortcut cards (compact or regular). Default is regular.
+    var homeShortcutCardStyle: HomeShortcutCardStyle {
+        get {
+            if let cached = _homeShortcutCardStyle { return cached }
+            guard let rawValue = string(for: .homeShortcutCardStyle) else {
+                return .regular
+            }
+            return HomeShortcutCardStyle(rawValue: rawValue) ?? .regular
+        }
+        set {
+            _homeShortcutCardStyle = newValue
+            set(newValue.rawValue, for: .homeShortcutCardStyle)
+        }
+    }
+
+    /// Color emphasis for home shortcut cards (soft or vibrant), independent of
+    /// the layout style. Default is soft.
+    var homeShortcutCardColor: HomeShortcutCardColor {
+        get {
+            if let cached = _homeShortcutCardColor { return cached }
+            guard let rawValue = string(for: .homeShortcutCardColor) else {
+                return .soft
+            }
+            return HomeShortcutCardColor(rawValue: rawValue) ?? .soft
+        }
+        set {
+            _homeShortcutCardColor = newValue
+            set(newValue.rawValue, for: .homeShortcutCardColor)
+        }
+    }
+
+    /// Palette used by the "regular" card style. Colors are applied by grid
+    /// position. Default is Accent (the first palette option).
+    var homeShortcutColorfulPalette: HomeShortcutColorfulPalette {
+        get {
+            if let cached = _homeShortcutColorfulPalette { return cached }
+            guard let rawValue = string(for: .homeShortcutColorfulPalette) else {
+                return .accent
+            }
+            return HomeShortcutColorfulPalette(rawValue: rawValue) ?? .accent
+        }
+        set {
+            _homeShortcutColorfulPalette = newValue
+            set(newValue.rawValue, for: .homeShortcutColorfulPalette)
+        }
+    }
+
+    /// User-supplied hex colors for the custom "colorful" palette. Stored as a
+    /// single comma-separated string. Defaults to a starter set of colors.
+    var homeShortcutCustomPaletteColors: [String] {
+        get {
+            if let cached = _homeShortcutCustomPaletteColors { return cached }
+            guard let raw = string(for: .homeShortcutCustomPaletteColors) else {
+                return HomeShortcutColorfulPalette.customStarterColors
+            }
+            let colors = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            return colors
+        }
+        set {
+            _homeShortcutCustomPaletteColors = newValue
+            let joined = newValue.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: ",")
+            set(joined, for: .homeShortcutCustomPaletteColors)
+        }
+    }
+
     /// Layout mode for home sections (list or grid). Default is list on iOS/macOS, grid on tvOS.
     var homeSectionLayout: HomeSectionLayout {
         get {
@@ -521,26 +586,11 @@ extension SettingsManager {
         return existingCards.contains(card.id) ? [] : [card]
     }
 
-    /// Returns all available section items for a media source that are NOT already added.
-    func availableSections(for source: MediaSource) -> [HomeSectionItem] {
-        let section = HomeSectionItem.mediaSource(sourceID: source.id)
-        let existingSections = Set(homeSectionOrder.map { $0.id })
-        return existingSections.contains(section.id) ? [] : [section]
-    }
-
     /// Returns all available cards across all media sources, grouped by source.
     func allAvailableMediaSourceShortcuts(sources: [MediaSource]) -> [(source: MediaSource, cards: [HomeShortcutItem])] {
         sources.compactMap { source in
             let cards = availableShortcuts(for: source)
             return cards.isEmpty ? nil : (source, cards)
-        }
-    }
-
-    /// Returns all available sections across all media sources, grouped by source.
-    func allAvailableMediaSourceSections(sources: [MediaSource]) -> [(source: MediaSource, sections: [HomeSectionItem])] {
-        sources.compactMap { source in
-            let sections = availableSections(for: source)
-            return sections.isEmpty ? nil : (source, sections)
         }
     }
 
@@ -614,6 +664,45 @@ extension SettingsManager {
 
         if !hadOrphans {
             LoggingService.shared.logCloudKit("cleanupOrphanedHomeMediaSourceItems: no orphans found, skipped all writes")
+        }
+    }
+
+    /// Removes ALL media-source Home *sections* (regardless of whether the source
+    /// still exists). Media sources are shortcuts-only now — a media-source
+    /// "section" was just a browse link and the feature was removed. Idempotent:
+    /// only writes when something changed, so it's safe to call on every load and
+    /// it also cleans up media-source sections that sync in from an older device.
+    /// Leaves media-source *shortcuts* (`homeShortcutOrder`/`homeShortcutVisibility`) untouched.
+    func removeAllHomeMediaSourceSections() {
+        var didChange = false
+
+        var sectionOrder = homeSectionOrder
+        let originalCount = sectionOrder.count
+        sectionOrder.removeAll { item in
+            if case .mediaSource = item { return true }
+            return false
+        }
+        if sectionOrder.count != originalCount {
+            LoggingService.shared.logCloudKit("removeAllHomeMediaSourceSections: removed \(originalCount - sectionOrder.count) media-source sections")
+            homeSectionOrder = sectionOrder
+            didChange = true
+        }
+
+        var sectionVis = homeSectionVisibility
+        let orphanedKeys = sectionVis.keys.filter { item in
+            if case .mediaSource = item { return true }
+            return false
+        }
+        if !orphanedKeys.isEmpty {
+            for key in orphanedKeys {
+                sectionVis.removeValue(forKey: key)
+            }
+            homeSectionVisibility = sectionVis
+            didChange = true
+        }
+
+        if didChange {
+            LoggingService.shared.logCloudKit("removeAllHomeMediaSourceSections: cleaned up media-source sections")
         }
     }
 

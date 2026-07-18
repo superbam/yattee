@@ -30,6 +30,111 @@ enum HomeShortcutLayout: String, CaseIterable, Sendable {
     }
 }
 
+// MARK: - Home Shortcut Card Style
+
+/// Layout for shortcut cards in the Home view (cards layout only). Controls
+/// only how the icon / title / subtitle / counter are positioned — the color
+/// emphasis is a separate setting (`HomeShortcutCardColor`).
+enum HomeShortcutCardStyle: String, CaseIterable, Sendable {
+    /// Horizontal card: icon leading, title with a count subtitle beside it.
+    case compact
+    /// "Reminders-style" card: icon top-leading, count top-trailing, title bottom.
+    case regular
+
+    var displayName: LocalizedStringKey {
+        switch self {
+        case .compact: return "home.shortcuts.style.compact"
+        case .regular: return "home.shortcuts.style.regular"
+        }
+    }
+}
+
+// MARK: - Home Shortcut Card Color
+
+/// Color emphasis for shortcut cards, independent of layout. The actual color
+/// comes from the selected `HomeShortcutColorfulPalette`.
+enum HomeShortcutCardColor: String, CaseIterable, Sendable {
+    /// Light tinted background, palette-colored icon, neutral (primary/secondary) text.
+    case soft
+    /// Solid palette fill with a gentle sheen, white icon/text.
+    case vibrant
+
+    var displayName: LocalizedStringKey {
+        switch self {
+        case .soft: return "home.shortcuts.color.soft"
+        case .vibrant: return "home.shortcuts.color.vibrant"
+        }
+    }
+}
+
+// MARK: - Home Shortcut Colorful Palette
+
+/// Palette used by the "regular" card style. Colors are applied by grid
+/// position (wrapping by palette length), so a card's color depends on where
+/// it sits, not on which shortcut it is.
+enum HomeShortcutColorfulPalette: String, CaseIterable, Sendable {
+    /// Uniform fill using the user's accent color on every card.
+    case accent
+    /// Reproduces the original per-position look (SwiftUI named colors).
+    case classic
+    case sunset
+    case meadow
+    case berry
+    case grape
+    /// User-supplied hex colors (stored in settings).
+    case custom
+
+    var displayName: LocalizedStringKey {
+        switch self {
+        case .accent: return "home.shortcuts.palette.accent"
+        case .classic: return "home.shortcuts.palette.classic"
+        case .sunset: return "home.shortcuts.palette.sunset"
+        case .meadow: return "home.shortcuts.palette.meadow"
+        case .berry: return "home.shortcuts.palette.berry"
+        case .grape: return "home.shortcuts.palette.grape"
+        case .custom: return "home.shortcuts.palette.custom"
+        }
+    }
+
+    /// Built-in colors for this palette; `nil` for `.accent` (resolved from the
+    /// user's accent color) and `.custom` (resolved from the stored hex list).
+    var builtInColors: [Color]? {
+        switch self {
+        case .accent:
+            return nil
+        case .classic:
+            // Ordered to match `HomeShortcutItem.defaultOrder` so the classic
+            // palette reproduces the app's original colorful appearance.
+            return [.blue, .teal, .indigo, .pink, .purple, .orange, .green, .red, .cyan, .brown]
+        case .sunset:
+            return ["#FF6B6B", "#F06595", "#CC5DE8", "#845EF7", "#FFA94D"].compactMap { Color(hex: $0) }
+        case .meadow:
+            return ["#2B8A3E", "#37B24D", "#66A80F", "#099268", "#0CA678"].compactMap { Color(hex: $0) }
+        case .berry:
+            return ["#E64980", "#C2255C", "#A61E4D", "#862E9C", "#5F3DC4"].compactMap { Color(hex: $0) }
+        case .grape:
+            return ["#7048E8", "#9C36B5", "#C2255C", "#E8590C", "#F08C00"].compactMap { Color(hex: $0) }
+        case .custom:
+            return nil
+        }
+    }
+
+    /// Starter hex colors used to seed a new custom palette.
+    static let customStarterColors = ["#007AFF", "#30B0C7", "#5856D6", "#FF2D55", "#AF52DE"]
+
+    /// Resolves the color for a shortcut at `position` in the grid, wrapping by
+    /// palette length. The `.accent` palette fills every position with
+    /// `accentColor`. Falls back to the Classic palette if the selection yields
+    /// no usable colors (e.g. an empty or all-invalid custom list).
+    static func color(forPosition position: Int, palette: HomeShortcutColorfulPalette, customHex: [String], accentColor: Color) -> Color {
+        if palette == .accent { return accentColor }
+        let colors = palette == .custom ? customHex.compactMap { Color(hex: $0) } : (palette.builtInColors ?? [])
+        let usable = colors.isEmpty ? (classic.builtInColors ?? [.accentColor]) : colors
+        guard !usable.isEmpty else { return .accentColor }
+        return usable[position % usable.count]
+    }
+}
+
 // MARK: - Home Section Layout
 
 /// Layout mode for the configurable home sections (Continue Watching, Feed, etc.).
@@ -190,6 +295,42 @@ enum HomeShortcutItem: Codable, Hashable, Identifiable, Sendable {
         }
     }
 
+    /// Fixed color for this shortcut used by the "colorful" card style.
+    /// Dynamic items (instance content / media sources) derive a stable color
+    /// from their identifier so multiple items get varied hues.
+    var cardColor: Color {
+        switch self {
+        case .openURL: return .blue
+        case .remoteControl: return .teal
+        case .playlists: return .indigo
+        case .bookmarks: return .pink
+        case .continueWatching: return .purple
+        case .history: return .orange
+        case .downloads: return .green
+        case .channels: return .red
+        case .subscriptions: return .cyan
+        case .mediaSources: return .brown
+        case .instanceContent(let instanceID, _):
+            return Self.colorfulPalette[Self.stableIndex(for: instanceID.uuidString, count: Self.colorfulPalette.count)]
+        case .mediaSource(let sourceID):
+            return Self.colorfulPalette[Self.stableIndex(for: sourceID.uuidString, count: Self.colorfulPalette.count)]
+        }
+    }
+
+    /// Palette used to assign stable colors to dynamic shortcut items.
+    private static let colorfulPalette: [Color] = [
+        .blue, .red, .orange, .pink, .teal, .green, .indigo, .purple, .cyan, .brown
+    ]
+
+    /// Deterministic (launch-stable) hash of a string into a palette index.
+    private static func stableIndex(for key: String, count: Int) -> Int {
+        var hash = 5381
+        for byte in key.utf8 {
+            hash = (hash &* 33) &+ Int(byte)
+        }
+        return abs(hash) % max(count, 1)
+    }
+
     // MARK: - Codable Implementation
 
     private enum CodingKeys: String, CodingKey {
@@ -294,6 +435,11 @@ enum HomeSectionItem: Codable, Hashable, Identifiable, Sendable {
     case history
     case downloads
     case instanceContent(instanceID: UUID, contentType: InstanceContentType)
+    /// Legacy, decode-only. Media sources are shortcuts-only now — a media-source
+    /// "section" was just a browse link. Kept so existing saved `homeSectionOrder`
+    /// data still decodes (the array decodes all-or-nothing); any such items are
+    /// stripped on load by `SettingsManager.removeAllHomeMediaSourceSections()`.
+    /// No longer user-addable and not rendered.
     case mediaSource(sourceID: UUID)
 
     var id: String {

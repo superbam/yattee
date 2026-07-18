@@ -18,7 +18,7 @@ struct ExpandedPlayerSheet: View {
     // MARK: - Sheet State
 
     @State var showingQualitySheet = false
-    @State private var showingPlaylistSheet = false
+    @State var showingPlaylistSheet = false
     @State var showingDownloadSheet = false
     @State var showingDeleteDownloadAlert = false
     @State var showingQueueSheet = false
@@ -102,7 +102,7 @@ struct ExpandedPlayerSheet: View {
     var playerState: PlayerState? { playerService?.state }
     var downloadManager: DownloadManager? { appEnvironment?.downloadManager }
     var navigationCoordinator: NavigationCoordinator? { appEnvironment?.navigationCoordinator }
-    var accentColor: Color { appEnvironment?.settingsManager.accentColor.color ?? .accentColor }
+    var accentColor: Color { appEnvironment?.settingsManager.resolvedAccentColor ?? .accentColor }
 
     #if os(iOS)
     var inAppOrientationLock: Bool { appEnvironment?.settingsManager.inAppOrientationLock ?? false }
@@ -303,7 +303,14 @@ struct ExpandedPlayerSheet: View {
                 Color.black.ignoresSafeArea(edges: .bottom)
 
                 #if os(iOS) || os(macOS)
-                if wideScreen {
+                if geometry.size.width <= 0 || geometry.size.height <= 0 {
+                    // Transient zero-size layout pass (e.g. the deferred macOS
+                    // player window before its first real layout). Don't mount
+                    // either layout branch — a branch mounted here would grab
+                    // the shared render view for one frame and immediately hand
+                    // it off when the real size picks the other branch.
+                    Color.black.ignoresSafeArea(.all)
+                } else if wideScreen {
                     if let video = playerState?.currentVideo {
                         // Widescreen layout with floating panel
                         // Must ignore safe area to get full screen geometry
@@ -667,12 +674,11 @@ private struct PlayerSheetsModifier: ViewModifier {
     private var qualitySelectorSheet: some View {
         if let playerService {
             let supportedFormats = playerService.currentBackendType.supportedFormats
-            let dashEnabled = appEnvironment?.settingsManager.dashEnabled ?? false
             QualitySelectorView(
                 streams: playerService.availableStreams.filter { stream in
                     let format = StreamFormat.detect(from: stream)
-                    // Filter out DASH streams if disabled in settings
-                    if format == .dash && !dashEnabled {
+                    // DASH is never offered for manual selection
+                    if format == .dash {
                         return false
                     }
                     return supportedFormats.contains(format)
@@ -690,6 +696,7 @@ private struct PlayerSheetsModifier: ViewModifier {
                 },
                 currentRate: playerState?.rate ?? .x1,
                 isControlsLocked: playerState?.isControlsLocked ?? false,
+                isAudioMode: appEnvironment?.settingsManager.audioOnlyModeEnabled ?? false,
                 onStreamSelected: { stream, audioStream in
                     onStreamSelected(stream, audioStream)
                 },
@@ -712,6 +719,11 @@ private struct PlayerSheetsModifier: ViewModifier {
                 },
                 onLockToggled: { locked in
                     playerState?.isControlsLocked = locked
+                },
+                onAudioModeToggled: { enabled in
+                    Task {
+                        await playerService.setAudioMode(enabled)
+                    }
                 }
             )
         }
@@ -952,11 +964,21 @@ private struct PlayerMacOSEventHandlersModifier: ViewModifier {
     }
 
     private func handleAspectRatioChange(oldValue: Double?, newValue: Double?) {
-        guard let newValue, newValue > 0 else { return }
+        // nil while a video is loaded means audio-only playback (no video
+        // track reports a size) — fall back to the standard 16:9 instead of
+        // keeping the previous video's ratio.
+        let ratio: Double
+        if let newValue, newValue > 0 {
+            ratio = newValue
+        } else if playerState?.currentVideo != nil {
+            ratio = 16.0 / 9.0
+        } else {
+            return
+        }
 
         // Always keep the manual-resize aspect lock in sync, regardless of the
         // auto-resize setting — the user always wants resize to be ratio-locked.
-        ExpandedPlayerWindowManager.shared.lockAspectRatio(newValue)
+        ExpandedPlayerWindowManager.shared.lockAspectRatio(ratio)
 
         guard appEnvironment?.settingsManager.playerSheetAutoResize == true else { return }
 
@@ -965,7 +987,7 @@ private struct PlayerMacOSEventHandlersModifier: ViewModifier {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(100))
             ExpandedPlayerWindowManager.shared.resizeToFitAspectRatio(
-                newValue,
+                ratio,
                 animated: shouldAnimate
             )
         }

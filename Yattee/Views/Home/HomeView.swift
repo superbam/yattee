@@ -34,7 +34,7 @@ struct HomeView: View {
     private var settingsManager: SettingsManager? { appEnvironment?.settingsManager }
 
     private var accentColor: Color {
-        appEnvironment?.settingsManager.accentColor.color ?? .accentColor
+        appEnvironment?.settingsManager.resolvedAccentColor ?? .accentColor
     }
 
     #if !os(tvOS)
@@ -43,9 +43,9 @@ struct HomeView: View {
 
     private var columns: [GridItem] {
         #if os(tvOS)
-        [GridItem(.adaptive(minimum: 280, maximum: 380), spacing: 32)]
+        [GridItem(.adaptive(minimum: 280, maximum: 380), spacing: 16)]
         #else
-        [GridItem(.adaptive(minimum: 150), spacing: 16)]
+        [GridItem(.adaptive(minimum: 150), spacing: 8)]
         #endif
     }
 
@@ -374,14 +374,23 @@ struct HomeView: View {
 
     private var shortcutsGrid: some View {
         #if os(tvOS)
-        let gridSpacing: CGFloat = 32
-        #else
         let gridSpacing: CGFloat = 16
+        #else
+        let gridSpacing: CGFloat = 8
         #endif
 
+        let shortcuts = settingsManager?.visibleShortcuts() ?? HomeShortcutItem.defaultOrder
+
         return LazyVGrid(columns: columns, spacing: gridSpacing) {
-            ForEach(settingsManager?.visibleShortcuts() ?? HomeShortcutItem.defaultOrder) { shortcut in
+            ForEach(Array(shortcuts.enumerated()), id: \.element.id) { index, shortcut in
                 shortcutCardView(for: shortcut)
+                    .environment(\.homeShortcutColorfulColor, colorfulColor(atPosition: index))
+                    #if !os(tvOS)
+                    .contextMenu {
+                        hideShortcutButton(for: shortcut)
+                        editShortcutsButton
+                    }
+                    #endif
             }
         }
         #if os(iOS)
@@ -391,6 +400,16 @@ struct HomeView: View {
         // geometry calculations from the parent collection view's layout system.
         .geometryGroup()
         #endif
+    }
+
+    /// Resolves the Regular-style fill color for a shortcut at the given grid
+    /// position from the selected palette (custom colors and accent color when
+    /// applicable).
+    private func colorfulColor(atPosition position: Int) -> Color {
+        let palette = settingsManager?.homeShortcutColorfulPalette ?? .accent
+        let customHex = settingsManager?.homeShortcutCustomPaletteColors ?? []
+        let accentColor = settingsManager?.resolvedAccentColor ?? .accentColor
+        return HomeShortcutColorfulPalette.color(forPosition: position, palette: palette, customHex: customHex, accentColor: accentColor)
     }
 
     private var shortcutsList: some View {
@@ -404,8 +423,37 @@ struct HomeView: View {
             ) {
                 shortcutRowView(for: shortcut)
             }
+            #if !os(tvOS)
+            .contextMenu {
+                hideShortcutButton(for: shortcut)
+                editShortcutsButton
+            }
+            #endif
         }
     }
+
+    #if !os(tvOS)
+    /// Context menu action that hides the given shortcut from Home.
+    private func hideShortcutButton(for shortcut: HomeShortcutItem) -> some View {
+        Button {
+            guard let settingsManager else { return }
+            var visibility = settingsManager.homeShortcutVisibility
+            visibility[shortcut] = false
+            settingsManager.homeShortcutVisibility = visibility
+        } label: {
+            Label(String(localized: "home.hideShortcut"), systemImage: "eye.slash")
+        }
+    }
+
+    /// Context menu action that opens the Home settings sheet to reorder/toggle shortcuts.
+    private var editShortcutsButton: some View {
+        Button {
+            showingCustomizeHome = true
+        } label: {
+            Label(String(localized: "home.editShortcuts"), systemImage: "gear")
+        }
+    }
+    #endif
 
     @ViewBuilder
     private func shortcutCardView(for shortcut: HomeShortcutItem) -> some View {
@@ -485,7 +533,9 @@ struct HomeView: View {
                 icon: "link",
                 title: String(localized: "home.shortcut.openURL"),
                 count: 0,
-                subtitle: ""
+                subtitle: "",
+                showsCount: false,
+                colorfulColor: HomeShortcutItem.openURL.cardColor
             )
         }
         #if os(tvOS)
@@ -507,6 +557,8 @@ struct HomeView: View {
                 title: String(localized: "home.shortcut.remoteControl"),
                 count: discoveredDevicesCount,
                 subtitle: "",
+                showsCount: false,
+                colorfulColor: HomeShortcutItem.remoteControl.cardColor,
                 statusIndicator: Circle()
                     .fill(isHosting ? Color.green : Color.red)
                     .frame(width: 8, height: 8)
@@ -528,7 +580,8 @@ struct HomeView: View {
                 icon: "list.bullet.rectangle",
                 title: String(localized: "home.playlists.title"),
                 count: playlists.count,
-                subtitle: formatCount(playlists.count, singular: "home.count.playlist", plural: "home.count.playlists")
+                subtitle: formatCount(playlists.count, singular: "home.count.playlist", plural: "home.count.playlists"),
+                colorfulColor: HomeShortcutItem.playlists.cardColor
             )
         }
         #if os(tvOS)
@@ -547,7 +600,8 @@ struct HomeView: View {
                 icon: "bookmark",
                 title: String(localized: "home.bookmarks.title"),
                 count: bookmarksCount,
-                subtitle: formatCount(bookmarksCount, singular: "home.count.bookmark", plural: "home.count.bookmarks")
+                subtitle: formatCount(bookmarksCount, singular: "home.count.bookmark", plural: "home.count.bookmarks"),
+                colorfulColor: HomeShortcutItem.bookmarks.cardColor
             )
         }
         #if os(tvOS)
@@ -566,7 +620,8 @@ struct HomeView: View {
                 icon: "play.circle",
                 title: String(localized: "home.shortcut.continueWatching"),
                 count: continueWatchingCount,
-                subtitle: formatCount(continueWatchingCount, singular: "home.count.video", plural: "home.count.videos")
+                subtitle: formatCount(continueWatchingCount, singular: "home.count.video", plural: "home.count.videos"),
+                colorfulColor: HomeShortcutItem.continueWatching.cardColor
             )
         }
         #if os(tvOS)
@@ -585,7 +640,8 @@ struct HomeView: View {
                 icon: "clock",
                 title: String(localized: "home.history.title"),
                 count: historyCount,
-                subtitle: formatCount(historyCount, singular: "home.count.video", plural: "home.count.videos")
+                subtitle: formatCount(historyCount, singular: "home.count.video", plural: "home.count.videos"),
+                colorfulColor: HomeShortcutItem.history.cardColor
             )
         }
         #if os(tvOS)
@@ -606,7 +662,8 @@ struct HomeView: View {
                 icon: "arrow.down.circle",
                 title: String(localized: "home.downloads.title"),
                 count: count,
-                subtitle: formatCount(count, singular: "home.count.video", plural: "home.count.videos")
+                subtitle: formatCount(count, singular: "home.count.video", plural: "home.count.videos"),
+                colorfulColor: HomeShortcutItem.downloads.cardColor
             )
         }
         .buttonStyle(.plain)
@@ -622,7 +679,8 @@ struct HomeView: View {
                 icon: "person.2",
                 title: String(localized: "home.channels.title"),
                 count: channelsCount,
-                subtitle: formatCount(channelsCount, singular: "home.count.channel", plural: "home.count.channels")
+                subtitle: formatCount(channelsCount, singular: "home.count.channel", plural: "home.count.channels"),
+                colorfulColor: HomeShortcutItem.channels.cardColor
             )
         }
         #if os(tvOS)
@@ -641,7 +699,9 @@ struct HomeView: View {
                 icon: "play.square.stack",
                 title: String(localized: "home.subscriptions.title"),
                 count: 0,
-                subtitle: String(localized: "home.subscriptions.subtitle")
+                subtitle: String(localized: "home.subscriptions.subtitle"),
+                showsCount: false,
+                colorfulColor: HomeShortcutItem.subscriptions.cardColor
             )
         }
         #if os(tvOS)
@@ -654,7 +714,7 @@ struct HomeView: View {
 
     private var mediaSourcesShortcutCard: some View {
         let mediaSourcesCount = appEnvironment?.mediaSourcesManager.enabledSources.count ?? 0
-        let instancesCount = appEnvironment?.instancesManager.instances.count ?? 0
+        let instancesCount = appEnvironment?.instancesManager.enabledInstances.count ?? 0
         let count = mediaSourcesCount + instancesCount
         return Button {
             appEnvironment?.navigationCoordinator.navigate(to: .mediaSources)
@@ -663,7 +723,8 @@ struct HomeView: View {
                 icon: "externaldrive.connected.to.line.below",
                 title: "Sources",
                 count: count,
-                subtitle: count == 1 ? "1 source" : "\(count) sources"
+                subtitle: count == 1 ? "1 source" : "\(count) sources",
+                colorfulColor: HomeShortcutItem.mediaSources.cardColor
             )
         }
         #if os(tvOS)
@@ -686,7 +747,9 @@ struct HomeView: View {
                     icon: contentType.icon,
                     title: contentType.localizedTitle,
                     count: 0,
-                    subtitle: instance.displayName
+                    subtitle: instance.displayName,
+                    showsCount: false,
+                    colorfulColor: HomeShortcutItem.instanceContent(instanceID: instanceID, contentType: contentType).cardColor
                 )
             }
             #if os(tvOS)
@@ -709,7 +772,9 @@ struct HomeView: View {
                     icon: source.type.systemImage,
                     title: source.name,
                     count: 0,
-                    subtitle: source.type.displayName
+                    subtitle: source.type.displayName,
+                    showsCount: false,
+                    colorfulColor: HomeShortcutItem.mediaSource(sourceID: sourceID).cardColor
                 )
             }
             #if os(tvOS)
@@ -849,7 +914,7 @@ struct HomeView: View {
 
     private var mediaSourcesShortcutRow: some View {
         let mediaSourcesCount = appEnvironment?.mediaSourcesManager.enabledSources.count ?? 0
-        let instancesCount = appEnvironment?.instancesManager.instances.count ?? 0
+        let instancesCount = appEnvironment?.instancesManager.enabledInstances.count ?? 0
         let count = mediaSourcesCount + instancesCount
         return Button {
             appEnvironment?.navigationCoordinator.navigate(to: .mediaSources)
@@ -992,8 +1057,11 @@ struct HomeView: View {
             #endif
         case .instanceContent(let instanceID, let contentType):
             instanceContentSection(instanceID: instanceID, contentType: contentType)
-        case .mediaSource(let sourceID):
-            mediaSourceSection(sourceID: sourceID)
+        case .mediaSource:
+            // Media sources are shortcuts-only; any legacy media-source section is
+            // stripped by removeAllHomeMediaSourceSections() on load, so this is
+            // unreachable in practice. Rendered as empty for defense-in-depth.
+            EmptyView()
         }
     }
 
@@ -1247,11 +1315,6 @@ struct HomeView: View {
                         DownloadRowView(
                             download: download,
                             isActive: false,
-                            onDelete: {
-                                Task {
-                                    await downloadManager?.delete(download)
-                                }
-                            },
                             queueSource: .manual,
                             sourceLabel: String(localized: "queue.source.downloads"),
                             videoList: videoList,
@@ -1357,44 +1420,6 @@ struct HomeView: View {
         }
     }
 
-    @ViewBuilder
-    private func mediaSourceSection(sourceID: UUID) -> some View {
-        if let source = appEnvironment?.mediaSourcesManager.sources.first(where: { $0.id == sourceID }),
-           source.isEnabled {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(source.name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 32)
-                    .padding(.top, 16)
-                    .padding(.bottom, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                VideoListContent(listStyle: listStyle) {
-                    VideoListRow(
-                        isLast: true,
-                        rowStyle: .regular,
-                        listStyle: listStyle
-                    ) {
-                        Button {
-                            appEnvironment?.navigationCoordinator.navigate(to: .mediaBrowser(source, path: "/"))
-                        } label: {
-                            HStack {
-                                Image(systemName: source.type.systemImage)
-                                    .foregroundStyle(.secondary)
-                                Text("mediaSources.browse \(source.name)")
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: - Data Loading
 
     private func loadData() {
@@ -1406,6 +1431,8 @@ struct HomeView: View {
         loadRemoteDevicesData()
         cleanupOrphanedHomeInstanceItems()
         cleanupOrphanedHomeMediaSourceItems()
+        // Media sources are shortcuts-only; drop any legacy media-source sections.
+        appEnvironment?.settingsManager.removeAllHomeMediaSourceSections()
     }
 
     private func cleanupOrphanedHomeInstanceItems() {

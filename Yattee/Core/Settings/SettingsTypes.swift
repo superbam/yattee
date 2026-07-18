@@ -7,6 +7,11 @@
 
 import Foundation
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 // MARK: - Theme & Appearance
 
@@ -22,6 +27,24 @@ enum AppTheme: String, CaseIterable, Codable {
         case .dark: return .dark
         }
     }
+
+    #if canImport(UIKit)
+    var userInterfaceStyle: UIUserInterfaceStyle {
+        switch self {
+        case .system: return .unspecified
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+    #elseif canImport(AppKit)
+    var appearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+    #endif
 }
 
 enum AccentColor: String, CaseIterable, Codable {
@@ -35,10 +58,20 @@ enum AccentColor: String, CaseIterable, Codable {
     case blue
     case purple
     case indigo
+    case custom
 
+    /// Fixed swatches shown in the settings grid; `.custom` is rendered
+    /// separately as a color picker, and `.indigo` is retired from the grid
+    /// but still resolves for users who selected it before it was removed.
+    static var presets: [AccentColor] {
+        allCases.filter { $0 != .custom && $0 != .indigo }
+    }
+
+    /// The color for `.custom` lives in settings storage — resolve through
+    /// `SettingsManager.resolvedAccentColor` instead of this property.
     var color: Color {
         switch self {
-        case .default: return .blue  // System default accent color
+        case .default, .custom: return .blue  // System default accent color
         case .red: return .red
         case .pink: return .pink
         case .orange: return .orange
@@ -200,37 +233,6 @@ enum DownloadQuality: String, CaseIterable, Codable, Sendable {
         }
     }
 }
-
-// MARK: - macOS Player Mode
-
-#if os(macOS)
-enum MacPlayerMode: String, CaseIterable, Codable {
-    case window
-    case floatingWindow
-    case inline
-
-    var displayName: String {
-        switch self {
-        case .window: return String(localized: "settings.playback.macOS.playerMode.window")
-        case .floatingWindow: return String(localized: "settings.playback.macOS.playerMode.floatingWindow")
-        case .inline: return String(localized: "settings.playback.macOS.playerMode.inline")
-        }
-    }
-
-    /// Whether this mode uses a separate window (vs sheet/inline)
-    var usesWindow: Bool {
-        switch self {
-        case .window, .floatingWindow: return true
-        case .inline: return false
-        }
-    }
-
-    /// Whether the window should float above other windows
-    var isFloating: Bool {
-        self == .floatingWindow
-    }
-}
-#endif
 
 // MARK: - Haptic Feedback
 

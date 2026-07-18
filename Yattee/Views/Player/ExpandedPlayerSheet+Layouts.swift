@@ -796,7 +796,7 @@ extension ExpandedPlayerSheet {
                         closeVideo()
                     },
                     onTogglePiP: {
-                        if let mpvBackend = backend as? MPVBackend {
+                        if let mpvBackend = playerService.currentBackend as? MPVBackend {
                             mpvBackend.togglePiP()
                         }
                     },
@@ -873,9 +873,9 @@ extension ExpandedPlayerSheet {
                 .offset(y: controlsVerticalOffset)
             }
             #elseif os(macOS)
-            if let backend = playerService?.currentBackend,
-               backend.backendType == .mpv,
-               let playerState,
+            // No backend gate: the backend is created only after the video
+            // details fetch, and controls should be visible while loading.
+            if let playerState,
                let playerService,
                playerState.pipState != .active && !playerState.showDebugOverlay {
                 MacOSPlayerControlsView(
@@ -897,12 +897,15 @@ extension ExpandedPlayerSheet {
                         closeVideo()
                     },
                     onTogglePiP: {
-                        if let mpvBackend = backend as? MPVBackend {
+                        if let mpvBackend = playerService.currentBackend as? MPVBackend {
                             mpvBackend.togglePiP()
                         }
                     },
                     onPlayNext: {
                         await playerService.playNext()
+                    },
+                    onPlayPrevious: {
+                        await playerService.playPrevious()
                     },
                     onVolumeChanged: { [weak appEnvironment] volume in
                         playerService.currentBackend?.volume = volume
@@ -917,6 +920,16 @@ extension ExpandedPlayerSheet {
                     },
                     onShowSettings: { [self] in
                         showingQualitySheet = true
+                    },
+                    onShowQueue: { [self] in
+                        showingQueueSheet = true
+                    },
+                    onShowPlaylistSelector: { [self] in
+                        showingPlaylistSheet = true
+                    },
+                    onRateChanged: { rate in
+                        playerState.rate = rate
+                        playerService.currentBackend?.rate = Float(rate.rawValue)
                     }
                 )
                 .frame(width: controlsWidth, height: controlsHeight)
@@ -1129,9 +1142,9 @@ extension ExpandedPlayerSheet {
             .frame(width: controlsWidth, height: controlsHeight)
         }
         #elseif os(macOS)
-        if let backend = playerService?.currentBackend,
-           backend.backendType == .mpv,
-           let playerState,
+        // No backend gate: the backend is created only after the video
+        // details fetch, and controls should be visible while loading.
+        if let playerState,
            let playerService,
            playerState.pipState != .active && !playerState.showDebugOverlay {
             MacOSPlayerControlsView(
@@ -1153,12 +1166,15 @@ extension ExpandedPlayerSheet {
                     closeVideo()
                 },
                 onTogglePiP: {
-                    if let mpvBackend = backend as? MPVBackend {
+                    if let mpvBackend = playerService.currentBackend as? MPVBackend {
                         mpvBackend.togglePiP()
                     }
                 },
                 onPlayNext: {
                     await playerService.playNext()
+                },
+                onPlayPrevious: {
+                    await playerService.playPrevious()
                 },
                 onVolumeChanged: { [weak appEnvironment] volume in
                     playerService.currentBackend?.volume = volume
@@ -1173,6 +1189,16 @@ extension ExpandedPlayerSheet {
                 },
                 onShowSettings: { [self] in
                     showingQualitySheet = true
+                },
+                onShowQueue: { [self] in
+                    showingQueueSheet = true
+                },
+                onShowPlaylistSelector: { [self] in
+                    showingPlaylistSheet = true
+                },
+                onRateChanged: { rate in
+                    playerState.rate = rate
+                    playerService.currentBackend?.rate = Float(rate.rawValue)
                 }
             )
             .frame(width: controlsWidth, height: controlsHeight)
@@ -1421,7 +1447,7 @@ extension ExpandedPlayerSheet {
                         closeVideo()
                     },
                     onTogglePiP: {
-                        if let mpvBackend = backend as? MPVBackend {
+                        if let mpvBackend = playerService.currentBackend as? MPVBackend {
                             mpvBackend.togglePiP()
                         }
                     },
@@ -1525,9 +1551,9 @@ extension ExpandedPlayerSheet {
                 }
             }
             #elseif os(macOS)
-            if let backend = playerService?.currentBackend,
-               backend.backendType == .mpv,
-               let playerState,
+            // No backend gate: the backend is created only after the video
+            // details fetch, and controls should be visible while loading.
+            if let playerState,
                let playerService,
                playerState.pipState != .active && !playerState.showDebugOverlay {
                 MacOSPlayerControlsView(
@@ -1545,20 +1571,36 @@ extension ExpandedPlayerSheet {
                         playerService.seekBackward(by: seconds)
                     },
                     onToggleFullscreen: {
-                        // Toggle native macOS fullscreen
-                        NSApp.keyWindow?.toggleFullScreen(nil)
+                        // Toggle native macOS fullscreen (drops the floating
+                        // config first so a pinned window can enter fullscreen)
+                        ExpandedPlayerWindowManager.shared.toggleFullScreen()
                     },
-                    isFullscreen: NSApp.keyWindow?.styleMask.contains(.fullScreen) == true,
+                    // The coordinator flag covers the inline overlay (where the
+                    // main window is the fullscreen one) and, being @Observable,
+                    // refreshes the button icon on toggle; the keyWindow check
+                    // covers the separate-window presentation.
+                    isFullscreen: navigationCoordinator?.isMacInlinePlayerFullScreen == true
+                        || NSApp.keyWindow?.styleMask.contains(.fullScreen) == true,
+                    // Esc collapses the inline overlay to the mini bar; in
+                    // separate-window mode Esc keeps its default handling.
+                    onCollapse: appEnvironment?.settingsManager.macPlayerSeparateWindow == true
+                        ? nil
+                        : { [weak navigationCoordinator] in
+                            navigationCoordinator?.isPlayerExpanded = false
+                        },
                     onClose: { [self] in
                         closeVideo()
                     },
                     onTogglePiP: {
-                        if let mpvBackend = backend as? MPVBackend {
+                        if let mpvBackend = playerService.currentBackend as? MPVBackend {
                             mpvBackend.togglePiP()
                         }
                     },
                     onPlayNext: {
                         await playerService.playNext()
+                    },
+                    onPlayPrevious: {
+                        await playerService.playPrevious()
                     },
                     onVolumeChanged: { [weak appEnvironment] volume in
                         playerService.currentBackend?.volume = volume
@@ -1573,6 +1615,20 @@ extension ExpandedPlayerSheet {
                     },
                     onShowSettings: { [self] in
                         showingQualitySheet = true
+                    },
+                    onShowQueue: { [self] in
+                        showingQueueSheet = true
+                    },
+                    onShowPlaylistSelector: { [self] in
+                        showingPlaylistSheet = true
+                    },
+                    onTitleTap: {
+                        onTogglePanel()
+                    },
+                    isDetailsPanelVisible: isPanelVisible,
+                    onRateChanged: { rate in
+                        playerState.rate = rate
+                        playerService.currentBackend?.rate = Float(rate.rawValue)
                     }
                 )
                 .frame(width: availableWidth, height: availableHeight)

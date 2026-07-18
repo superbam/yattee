@@ -335,6 +335,11 @@ extension SettingsManager {
 
         // Copy all local settings to iCloud
         for key in SettingsKey.allCases {
+            // Skip local-only keys (device-specific settings that shouldn't sync)
+            if key.isLocalOnly {
+                continue
+            }
+
             let pKey = platformKey(key)
             if let value = localDefaults.object(forKey: pKey) {
                 ubiquitousStore.set(value, forKey: pKey)
@@ -362,6 +367,11 @@ extension SettingsManager {
 
         // Copy all iCloud settings to local defaults
         for key in SettingsKey.allCases {
+            // Skip local-only keys (device-specific settings that shouldn't sync)
+            if key.isLocalOnly {
+                continue
+            }
+
             // Skip protected keys that should preserve local values
             if keysToPreserve.contains(key) {
                 continue
@@ -389,6 +399,10 @@ extension SettingsManager {
 
         clearCache()
         updateLastSyncTime()
+
+        #if !os(tvOS)
+        Self.applyTheme(theme)
+        #endif
     }
 
     /// Refreshes settings from iCloud by copying iCloud values to local storage.
@@ -445,5 +459,11 @@ extension SettingsManager {
 
         // Clear caches to force re-read from local storage
         clearCache()
+
+        // Re-apply the theme in case it was among the synced changes —
+        // it is enforced at the window level, not via SwiftUI state.
+        #if !os(tvOS)
+        Self.applyTheme(theme)
+        #endif
     }
 }

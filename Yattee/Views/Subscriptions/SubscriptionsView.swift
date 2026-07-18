@@ -26,6 +26,10 @@ struct SubscriptionsView: View {
     @State private var errorMessage: String?
     @State private var watchEntriesMap: [String: WatchEntry] = [:]
     @State private var showViewOptions = false
+    #if os(macOS)
+    @State private var showSubscriptionsData = false
+    @State private var pendingSubscriptionsData = false
+    #endif
 
     // View options (persisted)
     @AppStorage("subscriptionsLayout") private var layout: VideoListLayout = .list
@@ -35,6 +39,9 @@ struct SubscriptionsView: View {
     @AppStorage("subscriptionsVideoKind") private var videoKind: FeedVideoKind = .all
     @AppStorage("subscriptionsChannelStripSize") private var channelStripSize: ChannelStripSize = .normal
     @AppStorage("subscriptionsShowSidebar") private var showSidebar = true
+    /// Whether the last completed load produced enough channels for the sidebar,
+    /// so its space can be reserved before the next load finishes.
+    @AppStorage("subscriptionsSidebarExpected") private var sidebarExpected = false
     #if os(macOS)
     @AppStorage("subscriptionsMacOSSidebarWidth") private var macOSSidebarWidth = 240.0
     @State private var macOSSidebarDragStartWidth: Double?
@@ -54,6 +61,108 @@ struct SubscriptionsView: View {
         GridLayoutConfiguration(viewWidth: viewWidth, gridColumns: gridColumns)
     }
 
+    private var viewOptionsForm: some View {
+        Form {
+            Section {
+                #if os(macOS)
+                Toggle("viewOptions.showSidebar", isOn: $showSidebar)
+                #elseif os(iOS)
+                if isIPadRegular {
+                    Toggle("viewOptions.showSidebar", isOn: $showSidebar)
+                }
+                #elseif os(tvOS)
+                PlatformMenuPicker(String(localized: "viewOptions.showSidebar"), selection: $showSidebar) {
+                    Text("common.on").tag(true)
+                    Text("common.off").tag(false)
+                }
+                #endif
+
+                // Layout picker (inline menu)
+                PlatformMenuPicker(String(localized: "viewOptions.layout"), selection: $layout) {
+                    ForEach(VideoListLayout.allCases, id: \.self) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+
+                // List-specific options
+                if layout == .list {
+                    PlatformMenuPicker(String(localized: "viewOptions.rowSize"), selection: $rowStyle) {
+                        Text("viewOptions.rowSize.compact").tag(VideoRowStyle.compact)
+                        Text("viewOptions.rowSize.regular").tag(VideoRowStyle.regular)
+                        Text("viewOptions.rowSize.large").tag(VideoRowStyle.large)
+                    }
+                }
+
+                // Grid-specific options
+                if layout == .grid {
+                    #if os(tvOS)
+                    Picker("viewOptions.columns.header", selection: $gridColumns) {
+                        ForEach(GridConstants.minAllowedColumns...max(GridConstants.minAllowedColumns, gridConfig.maxColumns), id: \.self) { count in
+                            Text("\(count)").tag(count)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    #else
+                    Stepper(
+                        "viewOptions.columns \(min(max(GridConstants.minAllowedColumns, gridColumns), gridConfig.maxColumns))",
+                        value: $gridColumns,
+                        in: GridConstants.minAllowedColumns...max(GridConstants.minAllowedColumns, gridConfig.maxColumns)
+                    )
+                    #endif
+                }
+
+                #if os(tvOS)
+                PlatformMenuPicker(String(localized: "viewOptions.hideWatched"), selection: $hideWatched) {
+                    Text("common.on").tag(true)
+                    Text("common.off").tag(false)
+                }
+                #else
+                Toggle("viewOptions.hideWatched", isOn: $hideWatched)
+                #endif
+
+                #if os(iOS)
+                Picker("viewOptions.channelStrip", selection: $channelStripSize) {
+                    ForEach(ChannelStripSize.allCases, id: \.self) { size in
+                        Text(size.displayName).tag(size)
+                    }
+                }
+                .disabled(isIPadRegular && showSidebar)
+                #endif
+            }
+
+            #if os(macOS)
+            Section {
+                Button {
+                    pendingSubscriptionsData = true
+                    showViewOptions = false
+                } label: {
+                    Label(String(localized: "manageChannels.subscriptionsData"), systemImage: "person.2.badge.gearshape")
+                }
+            }
+            #elseif os(iOS)
+            Section {
+                NavigationLink {
+                    SubscriptionsSettingsView()
+                } label: {
+                    Label(String(localized: "manageChannels.subscriptionsData"), systemImage: "person.2.badge.gearshape")
+                }
+            }
+            #endif
+        }
+    }
+
+    #if os(macOS)
+    private var subscriptionsDataSheet: some View {
+        NavigationStack {
+            SubscriptionsSettingsView()
+                .toolbar {
+                    sheetCloseToolbarItem { showSubscriptionsData = false }
+                }
+        }
+        .frame(minWidth: 500, minHeight: 450)
+    }
+    #endif
+
     private var isShowingFullScreenError: Bool {
         if case .error = feedCache.feedLoadState, feedCache.videos.isEmpty {
             return true
@@ -63,7 +172,7 @@ struct SubscriptionsView: View {
 
     private var dataManager: DataManager? { appEnvironment?.dataManager }
     private var subscriptionService: SubscriptionService? { appEnvironment?.subscriptionService }
-    private var accentColor: Color { appEnvironment?.settingsManager.accentColor.color ?? .accentColor }
+    private var accentColor: Color { appEnvironment?.settingsManager.resolvedAccentColor ?? .accentColor }
     private var yatteeServer: Instance? {
         appEnvironment?.instancesManager.enabledYatteeServerInstances.first
     }
@@ -236,6 +345,15 @@ struct SubscriptionsView: View {
         return progress > 0 && progress < 1 ? progress : nil
     }
 
+    /// View options button lives on the leading edge on macOS, trailing elsewhere.
+    private var viewOptionsPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .navigation
+        #else
+        .primaryAction
+        #endif
+    }
+
     var body: some View {
         GeometryReader { geometry in
             ScrollViewReader { proxy in
@@ -271,6 +389,11 @@ struct SubscriptionsView: View {
                     HStack(spacing: 0) {
                         if showSidebar && subscriptionsLoaded && subscriptions.count > 1 {
                             macOSChannelsSidebar
+                                .frame(width: clampedMacOSSidebarWidth)
+
+                            macOSSidebarResizeHandle
+                        } else if showSidebar && !subscriptionsLoaded && sidebarExpected {
+                            macOSSidebarPlaceholder
                                 .frame(width: clampedMacOSSidebarWidth)
 
                             macOSSidebarResizeHandle
@@ -336,96 +459,39 @@ struct SubscriptionsView: View {
                 .toolbarTitleDisplayMode(.inlineLarge)
                 #endif
                 .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
+                    ToolbarItem(placement: viewOptionsPlacement) {
                         Button {
                             showViewOptions = true
                         } label: {
                             Label(String(localized: "viewOptions.title"), systemImage: "slider.horizontal.3")
                         }
                         .liquidGlassTransitionSource(id: "subscriptionsViewOptions", in: sheetTransition)
+                        #if os(macOS)
+                        .popover(isPresented: $showViewOptions, arrowEdge: .bottom) {
+                            viewOptionsForm
+                                .padding()
+                                .frame(width: 300)
+                                .onDisappear {
+                                    // Present the sheet only after the popover is gone,
+                                    // otherwise the presentation is swallowed.
+                                    if pendingSubscriptionsData {
+                                        pendingSubscriptionsData = false
+                                        showSubscriptionsData = true
+                                    }
+                                }
+                        }
+                        #endif
                     }
                 }
                 #endif
+                #if os(macOS)
+                .sheet(isPresented: $showSubscriptionsData) {
+                    subscriptionsDataSheet
+                }
+                #else
                 .sheet(isPresented: $showViewOptions) {
                         NavigationStack {
-                            Form {
-                                Section {
-                                    #if os(macOS)
-                                    Toggle("viewOptions.showSidebar", isOn: $showSidebar)
-                                    #elseif os(iOS)
-                                    if isIPadRegular {
-                                        Toggle("viewOptions.showSidebar", isOn: $showSidebar)
-                                    }
-                                    #elseif os(tvOS)
-                                    PlatformMenuPicker(String(localized: "viewOptions.showSidebar"), selection: $showSidebar) {
-                                        Text("common.on").tag(true)
-                                        Text("common.off").tag(false)
-                                    }
-                                    #endif
-
-                                    // Layout picker (inline menu)
-                                    PlatformMenuPicker(String(localized: "viewOptions.layout"), selection: $layout) {
-                                        ForEach(VideoListLayout.allCases, id: \.self) { option in
-                                            Text(option.displayName).tag(option)
-                                        }
-                                    }
-
-                                    // List-specific options
-                                    if layout == .list {
-                                        PlatformMenuPicker(String(localized: "viewOptions.rowSize"), selection: $rowStyle) {
-                                            Text("viewOptions.rowSize.compact").tag(VideoRowStyle.compact)
-                                            Text("viewOptions.rowSize.regular").tag(VideoRowStyle.regular)
-                                            Text("viewOptions.rowSize.large").tag(VideoRowStyle.large)
-                                        }
-                                    }
-
-                                    // Grid-specific options
-                                    if layout == .grid {
-                                        #if os(tvOS)
-                                        Picker("viewOptions.columns.header", selection: $gridColumns) {
-                                            ForEach(GridConstants.minAllowedColumns...max(GridConstants.minAllowedColumns, gridConfig.maxColumns), id: \.self) { count in
-                                                Text("\(count)").tag(count)
-                                            }
-                                        }
-                                        .pickerStyle(.segmented)
-                                        #else
-                                        Stepper(
-                                            "viewOptions.columns \(min(max(GridConstants.minAllowedColumns, gridColumns), gridConfig.maxColumns))",
-                                            value: $gridColumns,
-                                            in: GridConstants.minAllowedColumns...max(GridConstants.minAllowedColumns, gridConfig.maxColumns)
-                                        )
-                                        #endif
-                                    }
-
-                                    #if os(tvOS)
-                                    PlatformMenuPicker(String(localized: "viewOptions.hideWatched"), selection: $hideWatched) {
-                                        Text("common.on").tag(true)
-                                        Text("common.off").tag(false)
-                                    }
-                                    #else
-                                    Toggle("viewOptions.hideWatched", isOn: $hideWatched)
-                                    #endif
-
-                                    #if os(iOS)
-                                    Picker("viewOptions.channelStrip", selection: $channelStripSize) {
-                                        ForEach(ChannelStripSize.allCases, id: \.self) { size in
-                                            Text(size.displayName).tag(size)
-                                        }
-                                    }
-                                    .disabled(isIPadRegular && showSidebar)
-                                    #endif
-                                }
-
-                                #if !os(tvOS)
-                                Section {
-                                    NavigationLink {
-                                        SubscriptionsSettingsView()
-                                    } label: {
-                                        Label(String(localized: "manageChannels.subscriptionsData"), systemImage: "person.2.badge.gearshape")
-                                    }
-                                }
-                                #endif
-                            }
+                            viewOptionsForm
                             #if os(tvOS)
                             .scrollClipDisabled()
                             .padding(.horizontal, 40)
@@ -437,15 +503,18 @@ struct SubscriptionsView: View {
                             #endif
                             #endif
                         }
-                        #if os(macOS)
-                        .frame(minWidth: 500, minHeight: 450)
-                        #endif
                         .presentationDetents([.height(520), .large])
                         .presentationDragIndicator(.visible)
                         #if os(iOS)
                         .presentationBackground(.thickMaterial)
                         #endif
                         .liquidGlassSheetContent(sourceID: "subscriptionsViewOptions", in: sheetTransition)
+                    }
+                    #endif
+                    .onAppear {
+                        // Synchronous load for local accounts so the sidebar is
+                        // present in the first layout pass (avoids layout jump).
+                        loadSubscriptions()
                     }
                     .task {
                         await loadSubscriptionsAsync()
@@ -913,6 +982,12 @@ struct SubscriptionsView: View {
         .scrollContentBackground(.hidden)
     }
 
+    private var macOSSidebarPlaceholder: some View {
+        ProgressView()
+            .controlSize(.small)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var macOSSidebarResizeHandle: some View {
         ZStack {
             Rectangle()
@@ -1278,6 +1353,7 @@ struct SubscriptionsView: View {
         if appEnvironment?.settingsManager.subscriptionAccount.type == .local {
             subscriptions = dataManager?.subscriptions() ?? []
             subscriptionsLoaded = true
+            sidebarExpected = subscriptions.count > 1
         }
 
         if let selectedID = selectedChannelID,
@@ -1295,6 +1371,7 @@ struct SubscriptionsView: View {
         if appEnvironment.settingsManager.subscriptionAccount.type == .local {
             subscriptions = dataManager?.subscriptions() ?? []
             subscriptionsLoaded = true
+            sidebarExpected = subscriptions.count > 1
             return
         }
 
@@ -1304,6 +1381,7 @@ struct SubscriptionsView: View {
             // Convert channels to Subscription objects for UI (not persisted)
             subscriptions = channels.map { Subscription.from(channel: $0) }
             subscriptionsLoaded = true
+            sidebarExpected = subscriptions.count > 1
         } catch {
             LoggingService.shared.error(
                 "Failed to load subscriptions: \(error.localizedDescription)",
@@ -1311,6 +1389,7 @@ struct SubscriptionsView: View {
             )
             subscriptions = []
             subscriptionsLoaded = true
+            sidebarExpected = false
         }
     }
 

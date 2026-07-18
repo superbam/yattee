@@ -122,6 +122,25 @@ struct InstanceBrowseView: View {
         }
     }
 
+    private var viewOptionsSheetContent: some View {
+        ViewOptionsSheet(
+            layout: $layout,
+            rowStyle: $rowStyle,
+            gridColumns: $gridColumnCount,
+            hideWatched: $hideWatched,
+            maxGridColumns: gridConfig.maxColumns
+        )
+    }
+
+    /// View options button lives on the leading edge on macOS, trailing elsewhere.
+    private var viewOptionsPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .navigation
+        #else
+        .primaryAction
+        #endif
+    }
+
     var body: some View {
         let backgroundStyle: ListBackgroundStyle = listStyle == .inset ? .grouped : .plain
         GeometryReader { geometry in
@@ -170,14 +189,8 @@ struct InstanceBrowseView: View {
 
                         // Tab picker (hidden during search)
                         if !isInSearchMode {
-                            Picker("", selection: $selectedTab) {
-                                ForEach(availableTabs) { tab in
-                                    Label(tab.title, systemImage: tab.systemImage)
-                                        .tag(tab)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .padding()
+                            tabPicker
+                                .padding()
                         }
 
                         // Content
@@ -248,27 +261,25 @@ struct InstanceBrowseView: View {
                 .overlay(
                     ScrollView {
                         VStack(spacing: 0) {
-                            // Tab picker (hidden during search)
+                            // Tab picker (hidden during search; lives in the toolbar on macOS)
+                            #if !os(macOS)
                             if !isInSearchMode {
-                                Picker("", selection: $selectedTab) {
-                                    ForEach(availableTabs) { tab in
-                                        Label(tab.title, systemImage: tab.systemImage)
-                                            .tag(tab)
-                                    }
-                                }
-                                .pickerStyle(.segmented)
-                                .padding()
+                                tabPicker
+                                    .padding()
                             }
+                            #endif
 
                             // Feed channel filter strip (hidden during search)
                             if selectedTab == .feed && !feedSubscriptions.isEmpty && !isInSearchMode {
                                 feedChannelFilterStrip
                             }
 
-                            // Search filter strip (shown persistently after search submitted)
+                            // Search filter strip (shown persistently after search submitted; lives in the toolbar on macOS)
+                            #if !os(macOS)
                             if isInSearchMode && (searchViewModel?.hasSearched ?? false) && instance.supportsSearchFilters {
                                 searchFiltersStrip
                             }
+                            #endif
 
                             // Content
                             Group {
@@ -340,26 +351,70 @@ struct InstanceBrowseView: View {
         .navigationTitle(instance.displayName)
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            // View options first so it is the leftmost navigation item on macOS.
+            ToolbarItem(placement: viewOptionsPlacement) {
                 Button {
                     showViewOptions = true
                 } label: {
                     Label(String(localized: "viewOptions.title"), systemImage: "slider.horizontal.3")
                 }
                 .liquidGlassTransitionSource(id: "instanceBrowseViewOptions", in: sheetTransition)
+                #if os(macOS)
+                .popover(isPresented: $showViewOptions, arrowEdge: .bottom) {
+                    viewOptionsSheetContent
+                }
+                #endif
             }
+            #if os(macOS)
+            if #available(macOS 26, *) {
+                // Render the items bare (conditional `if`, no opacity/disabled
+                // wrappers): wrapping a `.segmented` Picker inserts a hosting layer
+                // that makes the toolbar fall back to a Liquid-Glass pill instead of
+                // the native segmented control. The search filters button shows only
+                // while displaying search results; the principal picker swaps between
+                // the browse tab picker and the search content type picker.
+                if showsSearchFiltersInToolbar {
+                    ToolbarItem(placement: .navigation) {
+                        searchFiltersToolbarButton
+                    }
+                }
+                if isToolbarPickerVisible {
+                    ToolbarItem(placement: .principal) {
+                        if showsSearchFiltersInToolbar {
+                            searchContentTypePicker
+                        } else {
+                            tabPicker
+                        }
+                    }
+                }
+            } else if showsSearchFiltersInToolbar {
+                ToolbarItem(placement: .navigation) {
+                    searchFiltersToolbarButton
+                }
+                ToolbarItem(placement: .principal) {
+                    searchContentTypePicker
+                        .fixedSize()
+                }
+            } else if !isInSearchMode {
+                ToolbarItem(placement: .principal) {
+                    tabPicker
+                        .fixedSize()
+                }
+            }
+            // Pin the trailing group (search field) to the right edge,
+            // matching the global Search view.
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.flexible, placement: .primaryAction)
+            }
+            #endif
         }
         #endif
+        #if !os(macOS)
         .sheet(isPresented: $showViewOptions) {
-            ViewOptionsSheet(
-                layout: $layout,
-                rowStyle: $rowStyle,
-                gridColumns: $gridColumnCount,
-                hideWatched: $hideWatched,
-                maxGridColumns: gridConfig.maxColumns
-            )
-            .liquidGlassSheetContent(sourceID: "instanceBrowseViewOptions", in: sheetTransition)
+            viewOptionsSheetContent
+                .liquidGlassSheetContent(sourceID: "instanceBrowseViewOptions", in: sheetTransition)
         }
+        #endif
         .task {
             // Initialize search view model
             if let appEnvironment {
@@ -435,22 +490,90 @@ struct InstanceBrowseView: View {
                 searchViewModel?.fetchSuggestions(for: newValue)
             }
         }
+        #if !os(macOS)
         .sheet(isPresented: $showFilterSheet) {
-            SearchFiltersSheet(onApply: {
-                Task {
-                    await searchViewModel?.search(query: searchText)
-                }
-            }, filters: Binding(
-                get: { searchViewModel?.filters ?? .defaults },
-                set: { searchViewModel?.filters = $0 }
-            ))
+            searchFiltersSheetContent
             #if !os(tvOS)
-            .presentationDetents([.medium, .large])
+                .presentationDetents([.medium, .large])
             #endif
         }
+        #endif
     }
 
     // MARK: - Computed Properties
+
+    private var searchFiltersSheetContent: some View {
+        SearchFiltersSheet(onApply: {
+            Task {
+                await searchViewModel?.search(query: searchText)
+            }
+        }, filters: Binding(
+            get: { searchViewModel?.filters ?? .defaults },
+            set: { searchViewModel?.filters = $0 }
+        ))
+    }
+
+    #if os(macOS)
+    private var isShowingSearchResults: Bool {
+        isInSearchMode && (searchViewModel?.hasSearched ?? false)
+    }
+
+    private var showsSearchFiltersInToolbar: Bool {
+        isShowingSearchResults && instance.supportsSearchFilters
+    }
+
+    private var isToolbarPickerVisible: Bool {
+        // Tab picker stays visible while typing; it swaps to the search content
+        // type picker only once a search has been submitted
+        !isShowingSearchResults || showsSearchFiltersInToolbar
+    }
+
+    private var searchContentTypePicker: some View {
+        Picker("", selection: Binding(
+            get: { searchViewModel?.filters.type ?? .video },
+            set: { searchViewModel?.filters.type = $0 }
+        )) {
+            ForEach(SearchContentType.allCases) { type in
+                Text(type.title).tag(type)
+            }
+        }
+        .pickerStyle(.segmented)
+        .onChange(of: searchViewModel?.filters.type) { _, _ in
+            Task {
+                await searchViewModel?.search(query: searchText)
+            }
+        }
+    }
+
+    private var searchFiltersToolbarButton: some View {
+        Button {
+            showFilterSheet = true
+        } label: {
+            Label(String(localized: "search.filters"), systemImage: (searchViewModel?.filters.isDefault ?? true)
+                ? "line.3.horizontal.decrease.circle"
+                : "line.3.horizontal.decrease.circle.fill")
+        }
+        .popover(isPresented: $showFilterSheet, arrowEdge: .bottom) {
+            searchFiltersSheetContent
+        }
+    }
+    #endif
+
+    private var tabPicker: some View {
+        Picker("", selection: $selectedTab) {
+            ForEach(availableTabs) { tab in
+                #if os(macOS)
+                // Labels render icon-only in a macOS toolbar segmented control
+                Text(tab.title)
+                    .tag(tab)
+                #else
+                Label(tab.title, systemImage: tab.systemImage)
+                    .tag(tab)
+                #endif
+            }
+        }
+        .pickerStyle(.segmented)
+    }
 
     private var availableTabs: [BrowseTab] {
         var tabs: [BrowseTab]

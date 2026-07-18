@@ -38,6 +38,30 @@ private let glFormat10Bit: [CGLPixelFormatAttribute] = [
     CGLPixelFormatAttribute(0)
 ]
 
+/// Last-resort pixel format without `kCGLPFAAccelerated`, allowing a software
+/// renderer. This is what lets the app survive on GPU-less environments such as
+/// virtual machines, where no hardware-accelerated renderer is available.
+private let glFormatSoftware: [CGLPixelFormatAttribute] = [
+    kCGLPFAOpenGLProfile,
+    CGLPixelFormatAttribute(kCGLOGLPVersion_3_2_Core.rawValue),
+    kCGLPFADoubleBuffer,
+    kCGLPFAAllowOfflineRenderers,
+    CGLPixelFormatAttribute(0)
+]
+
+// MARK: - Render Health
+
+/// Cumulative render-health counters for the MPV OpenGL layer. `skips` counts
+/// frames consumed via the skip-render fallback (frame flag cleared without a
+/// real draw) — a climbing skip count with zero draws means the layer is not
+/// being composited and the video output is stalled.
+struct MPVRenderHealth {
+    var draws: UInt64
+    var skips: UInt64
+    var droppedDraws: UInt64
+    var lastDrawAge: TimeInterval?
+}
+
 // MARK: - MPVOpenGLLayer
 
 /// OpenGL layer for MPV rendering on macOS.
@@ -66,9 +90,6 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
     /// Buffer depth (8 for standard, 16 for 10-bit).
     private var bufferDepth: GLint = 8
 
-    /// Current framebuffer object ID.
-    private var fbo: GLint = 1
-
     /// When `true` the frame needs to be rendered.
     private var needsFlip = false
     private let needsFlipLock = NSLock()
@@ -76,6 +97,25 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
     /// When `true` drawing will proceed even if mpv indicates nothing needs to be done.
     private var forceDraw = false
     private let forceDrawLock = NSLock()
+
+    /// Retry bookkeeping for draws dropped due to a zero-sized viewport or
+    /// missing framebuffer (e.g. the shared view re-parented into a window
+    /// whose content hasn't been laid out yet).
+    private var droppedDrawRetries = 0
+    private let droppedDrawRetryLock = NSLock()
+
+    /// True while a forced draw has been requested but not yet executed.
+    var hasPendingForcedDraw: Bool { forceDrawLock.withLock { forceDraw } }
+
+    /// Render-health counters (see `MPVRenderHealth`). Touched on the render
+    /// queue in `draw`/`display`, read from the main actor by the playback
+    /// stats watchdog.
+    private var successfulDrawCount: UInt64 = 0
+    private var skipRenderCount: UInt64 = 0
+    private var droppedDrawCount: UInt64 = 0
+    private var lastSuccessfulDrawTime: CFTimeInterval?
+    private var skipsSinceLastDraw: UInt64 = 0
+    private let renderHealthLock = NSLock()
 
     /// Whether the layer has been set up with an MPV client.
     private var isSetup = false
@@ -141,16 +181,25 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
     // MARK: - Initialization
 
     /// Creates an MPVOpenGLLayer for the given video view.
-    init(videoView: MPVOGLView) {
+    /// Returns `nil` when no OpenGL pixel format / context can be created
+    /// (e.g. on a GPU-less virtual machine), so callers can fail gracefully
+    /// instead of crashing the app at launch.
+    init?(videoView: MPVOGLView) {
         self.videoView = videoView
 
-        // Create pixel format (try 10-bit first, fall back to 8-bit)
-        let (pixelFormat, depth) = MPVOpenGLLayer.createPixelFormat()
+        // Create pixel format (try 10-bit, then 8-bit, then software renderer)
+        guard let (pixelFormat, depth) = MPVOpenGLLayer.createPixelFormat() else {
+            return nil
+        }
         self.cglPixelFormat = pixelFormat
         self.bufferDepth = depth
 
         // Create OpenGL context
-        self.cglContext = MPVOpenGLLayer.createContext(pixelFormat: pixelFormat)
+        guard let context = MPVOpenGLLayer.createContext(pixelFormat: pixelFormat) else {
+            CGLDestroyPixelFormat(pixelFormat)
+            return nil
+        }
+        self.cglContext = context
 
         super.init()
 
@@ -297,14 +346,10 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
     ) {
         guard !isUninited, isSetup, let mpvClient else { return }
 
-        // Reset flags
-        needsFlipLock.withLock { needsFlip = false }
-        forceDrawLock.withLock { forceDraw = false }
-
-        // Clear the buffer
-        glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
-
-        // Get current FBO binding and viewport dimensions
+        // Validate the render target FIRST — before consuming flags or
+        // touching GL state. A forced draw that lands while the re-attached
+        // layer has no size/drawable must stay armed so a retry can repaint;
+        // consuming it here used to leave the video permanently black.
         var currentFBO: GLint = 0
         glGetIntegerv(GLenum(GL_DRAW_FRAMEBUFFER_BINDING), &currentFBO)
 
@@ -314,16 +359,36 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
         let width = viewport[2]
         let height = viewport[3]
 
-        guard width > 0, height > 0 else { return }
-
-        // Use the detected FBO (or fallback to cached)
-        if currentFBO != 0 {
-            fbo = currentFBO
+        guard width > 0, height > 0, currentFBO != 0 else {
+            let boundsSize = bounds.size
+            let droppedFBO = currentFBO
+            Task { @MainActor in
+                LoggingService.shared.warning(
+                    "MPVOpenGLLayer: dropped draw - viewport \(width)x\(height), fbo=\(droppedFBO), bounds=\(boundsSize), re-arming forced draw",
+                    category: .mpv
+                )
+            }
+            renderHealthLock.withLock { droppedDrawCount += 1 }
+            scheduleDroppedDrawRetry()
+            return
         }
+
+        // Reset flags
+        needsFlipLock.withLock { needsFlip = false }
+        forceDrawLock.withLock { forceDraw = false }
+        droppedDrawRetryLock.withLock { droppedDrawRetries = 0 }
+        renderHealthLock.withLock {
+            successfulDrawCount += 1
+            skipsSinceLastDraw = 0
+            lastSuccessfulDrawTime = CACurrentMediaTime()
+        }
+
+        // Clear the buffer
+        glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
 
         // Render the frame
         mpvClient.renderWithDepth(
-            fbo: fbo,
+            fbo: currentFBO,
             width: width,
             height: height,
             depth: bufferDepth
@@ -331,9 +396,20 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
 
         glFlush()
 
+        if !hasRenderedFirstFrame {
+            let glError = glGetError()
+            let renderedFBO = currentFBO
+            Task { @MainActor in
+                LoggingService.shared.debug(
+                    "MPVOpenGLLayer: first-frame draw fbo=\(renderedFBO) viewport=\(width)x\(height) glError=\(glError)",
+                    category: .mpv
+                )
+            }
+        }
+
         // Capture frame for PiP if enabled
         if captureFramesForPiP {
-            captureFrameForPiP(viewWidth: width, viewHeight: height, mainFBO: fbo)
+            captureFrameForPiP(viewWidth: width, viewHeight: height, mainFBO: currentFBO)
         }
 
         // Mark that we've rendered a frame (for first-frame tracking)
@@ -390,6 +466,25 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
         guard let mpvClient, let renderContext = mpvClient.mpvRenderContext,
               mpvClient.shouldRenderUpdateFrame() else { return }
 
+        // A long uninterrupted run of skips means the layer is not being
+        // composited (e.g. the shared view is parented in a non-visible
+        // window) and playback is silently video-less. Log the first skip
+        // after a real draw, then every ~300 (~10s at 30fps).
+        let skips = renderHealthLock.withLock { () -> UInt64 in
+            skipRenderCount += 1
+            skipsSinceLastDraw += 1
+            return skipsSinceLastDraw
+        }
+        if skips == 1 || skips.isMultiple(of: 300) {
+            let boundsSize = bounds.size
+            Task { @MainActor in
+                LoggingService.shared.warning(
+                    "MPVOpenGLLayer: skip-render consumed frame without draw (skips=\(skips) since last draw, bounds=\(boundsSize))",
+                    category: .mpv
+                )
+            }
+        }
+
         // Must lock OpenGL context before calling mpv render functions
         mpvClient.lockAndSetOpenGLContext()
         defer { mpvClient.unlockOpenGLContext() }
@@ -426,6 +521,30 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
             } else {
                 self.display()
             }
+        }
+    }
+
+    /// Schedule a bounded retry after a draw was dropped because the layer
+    /// had no valid viewport/framebuffer yet. Keeps retrying only while the
+    /// forced-draw request is still pending; `setFrameSize` on the hosting
+    /// view covers the case where the layer gains its size later than this.
+    private func scheduleDroppedDrawRetry() {
+        let attempt = droppedDrawRetryLock.withLock { () -> Int in
+            droppedDrawRetries += 1
+            return droppedDrawRetries
+        }
+        guard attempt <= 5 else { return }
+
+        renderQueue.asyncAfter(deadline: .now() + .milliseconds(50)) { [weak self] in
+            guard let self, !self.isUninited else { return }
+            guard self.hasPendingForcedDraw else { return }
+            Task { @MainActor in
+                LoggingService.shared.debug(
+                    "MPVOpenGLLayer: retrying dropped forced draw (attempt \(attempt))",
+                    category: .mpv
+                )
+            }
+            self.display()
         }
     }
 
@@ -543,10 +662,29 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
         renderQueue.async { [weak self] in
             guard let self else { return }
 
+            CGLLockContext(self.cglContext)
             CGLSetCurrentContext(self.cglContext)
-            glClearColor(0.0, 0.0, 0.0, 1.0)
-            glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
-            glFlush()
+
+            // Only clear when a framebuffer is actually bound. Clearing FBO 0
+            // on this core-profile context (no drawable attached outside of
+            // CAOpenGLLayer.draw) is framebuffer-incomplete and latches
+            // GL_INVALID_FRAMEBUFFER_OPERATION, which libmpv then reports as
+            // "after creating texture: OpenGL error INVALID_FRAMEBUFFER_OPERATION".
+            var boundFBO: GLint = 0
+            glGetIntegerv(GLenum(GL_DRAW_FRAMEBUFFER_BINDING), &boundFBO)
+            if boundFBO != 0 {
+                glClearColor(0.0, 0.0, 0.0, 1.0)
+                glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
+                glFlush()
+            } else {
+                Task { @MainActor in
+                    LoggingService.shared.debug(
+                        "MPVOpenGLLayer: clearToBlack skipped glClear (no framebuffer bound)",
+                        category: .mpv
+                    )
+                }
+            }
+            CGLUnlockContext(self.cglContext)
 
             // Force a display to show the cleared frame
             self.update(force: true)
@@ -558,10 +696,25 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
         hasRenderedFirstFrame = false
     }
 
+    /// Thread-safe snapshot of the render-health counters.
+    func renderHealthSnapshot() -> MPVRenderHealth {
+        renderHealthLock.withLock {
+            MPVRenderHealth(
+                draws: successfulDrawCount,
+                skips: skipRenderCount,
+                droppedDraws: droppedDrawCount,
+                lastDrawAge: lastSuccessfulDrawTime.map { CACurrentMediaTime() - $0 }
+            )
+        }
+    }
+
     // MARK: - Pixel Format and Context Creation
 
-    /// Create a CGL pixel format, trying 10-bit first, falling back to 8-bit.
-    private static func createPixelFormat() -> (CGLPixelFormatObj, GLint) {
+    /// Create a CGL pixel format, trying 10-bit first, falling back to 8-bit,
+    /// then to a software renderer. Returns `nil` if no pixel format can be
+    /// created (e.g. a GPU-less virtual machine) so the caller can fail
+    /// gracefully instead of crashing.
+    private static func createPixelFormat() -> (CGLPixelFormatObj, GLint)? {
         var pixelFormat: CGLPixelFormatObj?
         var numPixelFormats: GLint = 0
 
@@ -583,17 +736,30 @@ final class MPVOpenGLLayer: CAOpenGLLayer {
             return (pf, 8)
         }
 
-        // This should not happen on any reasonable Mac
-        fatalError("MPVOpenGLLayer: failed to create any OpenGL pixel format")
+        // Last resort: software renderer (no hardware acceleration). This keeps
+        // the app alive on machines without a usable GPU, such as VMs.
+        result = CGLChoosePixelFormat(glFormatSoftware, &pixelFormat, &numPixelFormats)
+        if result == kCGLNoError, let pf = pixelFormat {
+            Task { @MainActor in
+                LoggingService.shared.debug("MPVOpenGLLayer: created software (non-accelerated) pixel format", category: .mpv)
+            }
+            return (pf, 8)
+        }
+
+        // No pixel format available at all (e.g. GPU-less VM). Don't crash.
+        LoggingService.shared.error("MPVOpenGLLayer: failed to create any OpenGL pixel format (last error \(result.rawValue)) - video playback unavailable", category: .mpv)
+        return nil
     }
 
-    /// Create a CGL context with the given pixel format.
-    private static func createContext(pixelFormat: CGLPixelFormatObj) -> CGLContextObj {
+    /// Create a CGL context with the given pixel format. Returns `nil` on
+    /// failure so the caller can fail gracefully instead of crashing.
+    private static func createContext(pixelFormat: CGLPixelFormatObj) -> CGLContextObj? {
         var context: CGLContextObj?
         let result = CGLCreateContext(pixelFormat, nil, &context)
 
         guard result == kCGLNoError, let ctx = context else {
-            fatalError("MPVOpenGLLayer: failed to create OpenGL context: \(result)")
+            LoggingService.shared.error("MPVOpenGLLayer: failed to create OpenGL context: \(result.rawValue)", category: .mpv)
+            return nil
         }
 
         // Enable vsync

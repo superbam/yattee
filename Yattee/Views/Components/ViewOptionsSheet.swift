@@ -157,7 +157,8 @@ struct ViewOptionsSheet: View {
         .presentationBackground(.thickMaterial)
         #endif
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 320)
+        .formStyle(.grouped)
+        .frame(width: 300)
         #endif
     }
 }

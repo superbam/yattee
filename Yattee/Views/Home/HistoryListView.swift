@@ -79,6 +79,25 @@ struct HistoryListView: View {
         return ([], nil)
     }
 
+    private var viewOptionsSheetContent: some View {
+        ViewOptionsSheet(
+            layout: $layout,
+            rowStyle: $rowStyle,
+            gridColumns: $gridColumns,
+            hideWatched: nil,  // No hide watched for history view
+            maxGridColumns: gridConfig.maxColumns
+        )
+    }
+
+    /// View options button lives on the leading edge on macOS, trailing elsewhere.
+    private var viewOptionsPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .navigation
+        #else
+        .primaryAction
+        #endif
+    }
+
     var body: some View {
         GeometryReader { geometry in
             #if os(tvOS)
@@ -157,19 +176,31 @@ struct HistoryListView: View {
         .toolbarTitleDisplayMode(.inlineLarge)
         .searchable(text: $searchText, prompt: Text(String(localized: "history.search.placeholder")))
         .toolbar {
+            #if os(macOS)
+            // Pin the trailing group (search field + toolbar buttons) to the right edge,
+            // matching the global Search view.
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.flexible, placement: .primaryAction)
+            }
+            #endif
             // View options button (always visible)
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem(placement: viewOptionsPlacement) {
                 Button {
                     showViewOptions = true
                 } label: {
                     Label(String(localized: "viewOptions.title"), systemImage: "slider.horizontal.3")
                 }
                 .liquidGlassTransitionSource(id: "historyViewOptions", in: sheetTransition)
+                #if os(macOS)
+                .popover(isPresented: $showViewOptions, arrowEdge: .bottom) {
+                    viewOptionsSheetContent
+                }
+                #endif
             }
 
             // Clear history menu (only when not empty)
             if !history.isEmpty {
-                ToolbarItem(placement: .automatic) {
+                ToolbarItem(placement: .primaryAction) {
                     Menu {
                         ForEach(ClearHistoryOption.allCases, id: \.self) { option in
                             Button(role: .destructive) {
@@ -186,16 +217,12 @@ struct HistoryListView: View {
             }
         }
         #endif
+        #if !os(macOS)
         .sheet(isPresented: $showViewOptions) {
-            ViewOptionsSheet(
-                layout: $layout,
-                rowStyle: $rowStyle,
-                gridColumns: $gridColumns,
-                hideWatched: nil,  // No hide watched for history view
-                maxGridColumns: gridConfig.maxColumns
-            )
-            .liquidGlassSheetContent(sourceID: "historyViewOptions", in: sheetTransition)
+            viewOptionsSheetContent
+                .liquidGlassSheetContent(sourceID: "historyViewOptions", in: sheetTransition)
         }
+        #endif
         .confirmationDialog(
             confirmationTitle,
             isPresented: $showingClearConfirmation,

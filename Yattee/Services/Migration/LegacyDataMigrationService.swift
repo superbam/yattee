@@ -25,76 +25,61 @@ final class LegacyDataMigrationService {
 
     private let instancesManager: InstancesManager
     private let basicAuthCredentialsManager: BasicAuthCredentialsManager
-    private let httpClient: HTTPClient
+    private let invidiousCredentialsManager: InvidiousCredentialsManager
+    private let pipedCredentialsManager: PipedCredentialsManager
+    private let invidiousAPI: InvidiousAPI
+    private let pipedAPI: PipedAPI
 
     // MARK: - State
 
-    /// Whether an import is currently in progress
-    private(set) var isImporting = false
-
-    /// Progress of the current import (0.0 to 1.0)
-    private(set) var importProgress: Double = 0.0
+    /// Changes whenever legacy account or instance defaults are resolved, so SwiftUI views refresh.
+    private(set) var legacyDataRevision = 0
 
     // MARK: - Initialization
 
     init(
         instancesManager: InstancesManager,
         basicAuthCredentialsManager: BasicAuthCredentialsManager,
-        httpClient: HTTPClient = HTTPClient()
+        invidiousCredentialsManager: InvidiousCredentialsManager,
+        pipedCredentialsManager: PipedCredentialsManager,
+        invidiousAPI: InvidiousAPI,
+        pipedAPI: PipedAPI
     ) {
         self.instancesManager = instancesManager
         self.basicAuthCredentialsManager = basicAuthCredentialsManager
-        self.httpClient = httpClient
+        self.invidiousCredentialsManager = invidiousCredentialsManager
+        self.pipedCredentialsManager = pipedCredentialsManager
+        self.invidiousAPI = invidiousAPI
+        self.pipedAPI = pipedAPI
     }
 
     // MARK: - Detection
 
-    /// Checks if there is legacy v1 data available for migration.
-    /// - Returns: true if v1 data exists and can be parsed
-    func hasLegacyData() -> Bool {
-        guard let items = parseLegacyData() else { return false }
-        return !items.isEmpty
+    /// Whether there are legacy accounts left for the user to review.
+    func hasLegacyAccountsToImport() -> Bool {
+        _ = legacyDataRevision
+        return !parseLegacyAccountsForImport().isEmpty
     }
 
-    /// Parses legacy v1 data from UserDefaults.
-    /// - Returns: Array of import items, or nil if data is corrupted or doesn't exist
-    func parseLegacyData() -> [LegacyImportItem]? {
-        let defaults = UserDefaults.standard
+    /// Whether there are account-less legacy instances (sources) left to import.
+    func hasLegacyInstancesToImport() -> Bool {
+        _ = legacyDataRevision
+        return !parseLegacyInstancesForImport().isEmpty
+    }
 
-        // Check if legacy data exists
-        guard defaults.object(forKey: legacyInstancesKey) != nil ||
-              defaults.object(forKey: legacyAccountsKey) != nil else {
-            return nil
-        }
+    /// Whether there is any legacy data (accounts or sources) left to import.
+    func hasLegacyDataToImport() -> Bool {
+        hasLegacyAccountsToImport() || hasLegacyInstancesToImport()
+    }
 
-        // Parse instances only (credentials are not imported)
-        let legacyInstances = parseLegacyInstances(from: defaults)
+    /// Whether the one-time legacy data prompt should be shown.
+    var shouldShowLegacyAccountsPrompt: Bool {
+        hasLegacyDataToImport() && !UserDefaults.standard.bool(forKey: legacyAccountsPromptShownKey)
+    }
 
-        // Build import items - one per unique instance
-        var items: [LegacyImportItem] = []
-
-        for instance in legacyInstances {
-            // Skip PeerTube (not supported in migration)
-            guard let instanceType = instance.instanceType,
-                  instanceType != .peertube else {
-                continue
-            }
-
-            guard let url = instance.url else { continue }
-
-            let item = LegacyImportItem(
-                id: UUID(),
-                legacyInstanceID: instance.id,
-                instanceType: instanceType,
-                url: url,
-                name: instance.name.isEmpty ? nil : instance.name,
-                proxiesVideos: instance.proxiesVideos
-            )
-            items.append(item)
-        }
-
-        // Return nil if no valid items were found (treat as no data)
-        return items.isEmpty ? nil : items
+    /// Marks the one-time legacy account prompt as shown.
+    func markLegacyAccountsPromptShown() {
+        UserDefaults.standard.set(true, forKey: legacyAccountsPromptShownKey)
     }
 
     // MARK: - Parsing Helpers
@@ -108,114 +93,233 @@ final class LegacyDataMigrationService {
         return array.compactMap { LegacyInstance.parse(from: $0) }
     }
 
-    // MARK: - Reachability
-
-    /// Checks if an instance is reachable.
-    /// - Parameter item: The import item to check
-    /// - Returns: true if the instance responds, false otherwise
-    func checkReachability(for item: LegacyImportItem) async -> Bool {
-        // Build the appropriate health check endpoint based on instance type
-        let endpoint: GenericEndpoint
-        switch item.instanceType {
-        case .invidious:
-            endpoint = GenericEndpoint(path: "/api/v1/stats", timeout: 10)
-        case .piped:
-            endpoint = GenericEndpoint(path: "/healthcheck", timeout: 10)
-        default:
-            return false
+    private func parseLegacyAccounts(from defaults: UserDefaults) -> [LegacyAccount] {
+        guard let array = defaults.array(forKey: legacyAccountsKey) as? [[String: Any]] else {
+            return []
         }
 
-        do {
-            _ = try await httpClient.fetchData(endpoint, baseURL: item.url)
-            return true
-        } catch {
-            return false
+        return array.compactMap { LegacyAccount.parse(from: $0) }
+    }
+
+    /// Parses legacy accounts and matches them with their legacy instances.
+    /// Accounts without a supported Invidious/Piped instance are omitted.
+    func parseLegacyAccountsForImport() -> [LegacyAccountImportItem] {
+        let defaults = UserDefaults.standard
+        let legacyInstances = parseLegacyInstances(from: defaults)
+        let instancesByID = legacyInstances.reduce(into: [String: LegacyInstance]()) { result, instance in
+            result[instance.id] = instance
+        }
+        let accounts = parseLegacyAccounts(from: defaults)
+
+        let importItems: [LegacyAccountImportItem] = accounts.compactMap { account in
+            let matchedInstance = instancesByID[account.instanceID]
+                ?? legacyInstances.first { $0.apiURL == account.apiURL }
+
+            guard let instance = matchedInstance,
+                  let instanceType = instance.instanceType,
+                  instanceType == .invidious || instanceType == .piped,
+                  let url = instance.url ?? URL(string: account.apiURL)
+            else {
+                return nil
+            }
+
+            if isLegacyAccountAlreadyImported(instanceType: instanceType, url: url) {
+                return nil
+            }
+
+            return LegacyAccountImportItem(
+                legacyAccountID: account.id,
+                legacyInstanceID: instance.id,
+                instanceType: instanceType,
+                url: url,
+                instanceName: instance.name.isEmpty ? nil : instance.name,
+                accountName: account.name.isEmpty ? nil : account.name,
+                username: account.username,
+                proxiesVideos: instance.proxiesVideos
+            )
+        }
+
+        return importItems
+    }
+
+    /// Parses account-less legacy instances that can be re-added as sources.
+    /// Instances tied to an account are handled by `parseLegacyAccountsForImport`
+    /// and are omitted here; instances already present in v2 are omitted too.
+    func parseLegacyInstancesForImport() -> [LegacyInstanceImportItem] {
+        let defaults = UserDefaults.standard
+        let legacyInstances = parseLegacyInstances(from: defaults)
+        let accounts = parseLegacyAccounts(from: defaults)
+
+        // Instances that already have an account are covered by the accounts section.
+        let accountInstanceIDs = Set(accounts.map(\.instanceID))
+        let accountHosts = Set(accounts.compactMap { account -> String? in
+            guard let url = URL(string: account.apiURL) else { return nil }
+            return Self.splitCredentials(from: url).cleanURL.host
+        })
+
+        return legacyInstances.compactMap { instance in
+            guard let instanceType = instance.instanceType,
+                  instanceType == .invidious || instanceType == .piped,
+                  let url = instance.url
+            else {
+                return nil
+            }
+
+            if accountInstanceIDs.contains(instance.id) {
+                return nil
+            }
+
+            let (cleanURL, _) = Self.splitCredentials(from: url)
+            if let host = cleanURL.host, accountHosts.contains(host) {
+                return nil
+            }
+
+            if isLegacyInstanceAlreadyImported(instanceType: instanceType, url: url) {
+                return nil
+            }
+
+            return LegacyInstanceImportItem(
+                legacyInstanceID: instance.id,
+                instanceType: instanceType,
+                url: url,
+                instanceName: instance.name.isEmpty ? nil : instance.name,
+                proxiesVideos: instance.proxiesVideos
+            )
         }
     }
 
     // MARK: - Import
 
-    /// Imports the selected items into the v2 system.
-    /// - Parameter items: The items to import (only selected items will be processed)
-    /// - Returns: The result of the import operation
-    func importItems(_ items: [LegacyImportItem]) async -> MigrationResult {
-        isImporting = true
-        importProgress = 0.0
+    /// Re-creates a legacy account by signing in with fresh credentials.
+    /// The matching source is created if needed; otherwise the existing matching source is reused.
+    /// - Parameters:
+    ///   - item: The legacy account to import
+    ///   - username: Username/email to use for the v2 login
+    ///   - password: Password to use for the v2 login
+    /// - Returns: The instance that now has the imported login credential
+    @discardableResult
+    func importLegacyAccount(_ item: LegacyAccountImportItem, username: String, password: String) async throws -> Instance {
+        let instance = instanceForAccountImport(item)
+        let (_, basicAuthCredentials) = Self.splitCredentials(from: item.url)
 
-        let selectedItems = items.filter(\.isSelected)
-        var succeeded: [LegacyImportItem] = []
-        var failed: [(item: LegacyImportItem, error: MigrationError)] = []
-        var skippedDuplicates: [LegacyImportItem] = []
-
-        let total = selectedItems.count
-
-        for (index, item) in selectedItems.enumerated() {
-            // Update progress
-            importProgress = Double(index) / Double(max(total, 1))
-
-            // Check for duplicates
-            if isDuplicate(item) {
-                skippedDuplicates.append(item)
-                continue
+        let credential: String
+        switch item.instanceType {
+        case .invidious:
+            let extraHeaders = basicAuthCredentials.map {
+                ["Authorization": Self.basicAuthHeader(username: $0.username, password: $0.password)]
             }
-
-            // Perform import
-            do {
-                try importItem(item)
-                succeeded.append(item)
-            } catch let error as MigrationError {
-                failed.append((item, error))
-            } catch {
-                failed.append((item, .unknown(error.localizedDescription)))
+            credential = try await invidiousAPI.login(
+                email: username,
+                password: password,
+                instance: instance,
+                extraHeaders: extraHeaders
+            )
+            addInstanceIfNeeded(instance)
+            if let basicAuthCredentials {
+                basicAuthCredentialsManager.setCredentials(
+                    username: basicAuthCredentials.username,
+                    password: basicAuthCredentials.password,
+                    for: instance
+                )
             }
+            invidiousCredentialsManager.setCredential(credential, for: instance)
+
+        case .piped:
+            credential = try await pipedAPI.login(username: username, password: password, instance: instance)
+            addInstanceIfNeeded(instance)
+            pipedCredentialsManager.setCredential(credential, for: instance)
+
+        default:
+            throw APIError.notSupported
         }
 
-        importProgress = 1.0
-        isImporting = false
-
-        return MigrationResult(
-            succeeded: succeeded,
-            failed: failed,
-            skippedDuplicates: skippedDuplicates
-        )
+        removeLegacyAccount(item)
+        return instance
     }
 
-    /// Imports a single item into the v2 system.
-    /// If the legacy URL contains embedded basic-auth credentials
-    /// (e.g. `https://user:pass@host`), they are stripped from the URL
-    /// and stored in the Keychain via `BasicAuthCredentialsManager`.
-    private func importItem(_ item: LegacyImportItem) throws {
-        let (cleanURL, credentials) = Self.splitCredentials(from: item.url)
+    /// Re-creates a legacy instance (source) without signing in.
+    /// The matching source is created if needed; otherwise the existing one is reused.
+    /// - Parameter item: The legacy instance to import
+    /// - Returns: The instance that was created or reused
+    @discardableResult
+    func importLegacyInstance(_ item: LegacyInstanceImportItem) -> Instance {
+        let (cleanURL, basicAuthCredentials) = Self.splitCredentials(from: item.url)
 
-        let instance = Instance(
+        let instance = instancesManager.instances.first { existing in
+            existing.url.host == cleanURL.host && existing.type == item.instanceType
+        } ?? Instance(
             id: UUID(),
             type: item.instanceType,
             url: cleanURL,
-            name: item.name,
+            name: item.instanceName,
             isEnabled: true,
             proxiesVideos: item.proxiesVideos
         )
 
-        instancesManager.add(instance)
+        addInstanceIfNeeded(instance)
 
-        if let credentials {
+        if let basicAuthCredentials {
             basicAuthCredentialsManager.setCredentials(
-                username: credentials.username,
-                password: credentials.password,
+                username: basicAuthCredentials.username,
+                password: basicAuthCredentials.password,
                 for: instance
             )
         }
+
+        removeLegacyInstance(item)
+        return instance
     }
 
-    /// Checks if an import item would be a duplicate of an existing instance.
-    private func isDuplicate(_ item: LegacyImportItem) -> Bool {
+    private func instanceForAccountImport(_ item: LegacyAccountImportItem) -> Instance {
         let (cleanURL, _) = Self.splitCredentials(from: item.url)
-        for existing in instancesManager.instances {
-            if existing.url.host == cleanURL.host && existing.type == item.instanceType {
-                return true
-            }
+        if let existing = instancesManager.instances.first(where: { existing in
+            existing.url.host == cleanURL.host && existing.type == item.instanceType
+        }) {
+            return existing
         }
-        return false
+
+        return Instance(
+            id: UUID(),
+            type: item.instanceType,
+            url: cleanURL,
+            name: item.instanceName,
+            isEnabled: true,
+            proxiesVideos: item.proxiesVideos
+        )
+    }
+
+    private func addInstanceIfNeeded(_ instance: Instance) {
+        guard !instancesManager.instances.contains(where: { $0.id == instance.id }) else {
+            return
+        }
+
+        instancesManager.add(instance)
+    }
+
+    private func isLegacyAccountAlreadyImported(instanceType: InstanceType, url: URL) -> Bool {
+        let (cleanURL, _) = Self.splitCredentials(from: url)
+
+        guard let existingInstance = instancesManager.instances.first(where: { existing in
+            existing.url.host == cleanURL.host && existing.type == instanceType
+        }) else {
+            return false
+        }
+
+        switch instanceType {
+        case .invidious:
+            return invidiousCredentialsManager.isLoggedIn(for: existingInstance)
+        case .piped:
+            return pipedCredentialsManager.isLoggedIn(for: existingInstance)
+        default:
+            return false
+        }
+    }
+
+    private func isLegacyInstanceAlreadyImported(instanceType: InstanceType, url: URL) -> Bool {
+        let (cleanURL, _) = Self.splitCredentials(from: url)
+        return instancesManager.instances.contains { existing in
+            existing.url.host == cleanURL.host && existing.type == instanceType
+        }
     }
 
     // MARK: - Credential Splitting
@@ -238,30 +342,87 @@ final class LegacyDataMigrationService {
         return (cleaned, BasicAuthCredential(username: user, password: password))
     }
 
-    // MARK: - Auto-Import
-
-    /// Silently imports any legacy v1 data on first launch.
-    /// Skips unreachable-checks and UI; just imports everything and deletes the legacy keys.
-    /// Safe to call repeatedly — if there is no legacy data left, this is a no-op.
-    func autoImportIfNeeded() async {
-        guard let items = parseLegacyData() else { return }
-        _ = await importItems(items)
-        deleteLegacyData()
+    private static func basicAuthHeader(username: String, password: String) -> String {
+        let value = "\(username):\(password)"
+        let encoded = Data(value.utf8).base64EncodedString()
+        return "Basic \(encoded)"
     }
 
     // MARK: - Cleanup
 
-    /// Deletes the legacy v1 data from UserDefaults.
-    /// Call this after a successful import or when the user confirms they don't want to import.
-    func deleteLegacyData() {
+    /// Removes one legacy account after successful import or explicit user dismissal.
+    /// If this was the last account, the account defaults key is removed.
+    func removeLegacyAccount(_ item: LegacyAccountImportItem) {
+        removeLegacyAccounts(withIDs: [item.legacyAccountID])
+    }
+
+    private func removeLegacyAccounts(withIDs ids: [String]) {
         let defaults = UserDefaults.standard
+        let ids = Set(ids)
 
-        // Remove legacy keys
-        defaults.removeObject(forKey: legacyInstancesKey)
-        defaults.removeObject(forKey: legacyAccountsKey)
+        guard var accounts = defaults.array(forKey: legacyAccountsKey) as? [[String: Any]] else {
+            return
+        }
 
-        // Note: We don't delete the old Keychain items as they may be needed
-        // if the user reinstalls v1 or for debugging purposes.
-        // The old Keychain service name is different so there's no conflict.
+        let originalCount = accounts.count
+        accounts.removeAll { dictionary in
+            guard let accountID = dictionary["id"] as? String else {
+                return false
+            }
+            return ids.contains(accountID)
+        }
+
+        guard accounts.count != originalCount else {
+            return
+        }
+
+        if accounts.isEmpty {
+            defaults.removeObject(forKey: legacyAccountsKey)
+        } else {
+            defaults.set(accounts, forKey: legacyAccountsKey)
+        }
+
+        legacyDataRevision += 1
+    }
+
+    /// Removes one legacy instance after import or explicit user dismissal.
+    /// If this was the last instance, the instance defaults key is removed.
+    func removeLegacyInstance(_ item: LegacyInstanceImportItem) {
+        removeLegacyInstances(withIDs: [item.legacyInstanceID])
+    }
+
+    private func removeLegacyInstances(withIDs ids: [String]) {
+        let defaults = UserDefaults.standard
+        let ids = Set(ids)
+
+        guard var instances = defaults.array(forKey: legacyInstancesKey) as? [[String: Any]] else {
+            return
+        }
+
+        let originalCount = instances.count
+        instances.removeAll { dictionary in
+            guard let instanceID = dictionary["id"] as? String else {
+                return false
+            }
+            return ids.contains(instanceID)
+        }
+
+        guard instances.count != originalCount else {
+            return
+        }
+
+        if instances.isEmpty {
+            defaults.removeObject(forKey: legacyInstancesKey)
+        } else {
+            defaults.set(instances, forKey: legacyInstancesKey)
+        }
+
+        legacyDataRevision += 1
+    }
+
+    // MARK: - Prompt State
+
+    private var legacyAccountsPromptShownKey: String {
+        "legacyAccountsImportPromptShown_v1"
     }
 }

@@ -439,8 +439,13 @@ final class MPVClient: @unchecked Sendable {
 
         // Use display-vdrop: drops/repeats frames to match display timing
         // This is lighter weight than display-resample (no interpolation overhead)
-        // and handles both hardware and software decode gracefully
+        // and handles both hardware and software decode gracefully.
+        // On tvOS, the user may override this via the debug Video Sync Mode setting.
+        #if os(tvOS)
+        setOptionSync("video-sync", SettingsManager.tvVideoSyncModeSync().rawValue)
+        #else
         setOptionSync("video-sync", "display-vdrop")
+        #endif
 
         // Allow frame dropping when decoder can't keep up (essential for software decode)
         // decoder+vo: drop at decoder level first, then at video output if still behind
@@ -448,10 +453,28 @@ final class MPVClient: @unchecked Sendable {
 
         // Audio
         setOptionSync("audio-client-name", "Yattee")
-        #if os(iOS) || os(tvOS)
+        #if os(tvOS)
+        // Prefer avfoundation (AVSampleBufferAudioRenderer): audiounit can't open
+        // 32-channel HDMI routes (Atmos "Continuous Audio Output") and stays silent.
+        // mpv falls back to audiounit if avfoundation fails to initialize.
+        setOptionSync("ao", "avfoundation,audiounit")
+        #elseif os(iOS)
         setOptionSync("ao", "audiounit")
         #elseif os(macOS)
-        setOptionSync("ao", "coreaudio")
+        // coreaudio is the native macOS AO, but on macOS 27 beta it fails to
+        // initialize ("unable to set the input channel layout on the audio
+        // unit … -50"), leaving playback silent. Worse, mpv's coreaudio AO
+        // registers a HAL hotplug listener before the step that fails and its
+        // init-failure path never unregisters it, so every failed init leaves
+        // a dangling listener that crashes (use-after-free) on the next audio
+        // device change. On macOS 27+ put avfoundation first so the failing
+        // coreaudio init never runs; older macOS keeps native coreaudio with
+        // avfoundation as fallback.
+        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
+            setOptionSync("ao", "avfoundation,coreaudio")
+        } else {
+            setOptionSync("ao", "coreaudio,avfoundation")
+        }
         #endif
 
         // Cache settings for network streams
@@ -480,8 +503,28 @@ final class MPVClient: @unchecked Sendable {
         // Apply subtitle appearance settings
         applySubtitleSettings()
 
+        // Apply user-configured fixed audio delay on tvOS (in seconds; setting is ms)
+        #if os(tvOS)
+        let delaySeconds = SettingsManager.tvAudioDelayMsSync() / 1000.0
+        setOptionSync("audio-delay", String(delaySeconds))
+        #endif
+
         // Apply user's custom MPV options (these can override defaults)
         applyCustomOptions()
+    }
+
+    /// Update the `audio-delay` property on a running MPV instance. Safe to call
+    /// while playback is active. Value is in milliseconds; converted to seconds
+    /// before being sent to MPV.
+    func updateAudioDelay(milliseconds: Double) {
+        mpvQueue.async { [weak self] in
+            guard let self, let mpv = self.mpv, !self.isDestroyed else { return }
+            let seconds = milliseconds / 1000.0
+            let str = String(seconds)
+            str.withCString { ptr in
+                _ = mpv_set_property_string(mpv, "audio-delay", ptr)
+            }
+        }
     }
 
     /// Apply subtitle appearance settings from user preferences.
@@ -578,11 +621,22 @@ final class MPVClient: @unchecked Sendable {
     ///   - audioURL: Optional separate audio track URL (for video-only streams)
     ///   - httpHeaders: Optional HTTP headers for streaming (cookies, referer, etc.)
     ///   - useEDL: If true and audioURL is provided, combine streams using EDL for unified caching
+    ///   - disableVideoTrack: If true, load with the video track disabled (audio mode for muxed files)
     ///   - options: Additional MPV options
-    func loadFile(_ url: URL, audioURL: URL? = nil, httpHeaders: [String: String]? = nil, useEDL: Bool = true, options: [String] = []) throws {
+    func loadFile(_ url: URL, audioURL: URL? = nil, httpHeaders: [String: String]? = nil, useEDL: Bool = true, disableVideoTrack: Bool = false, options: [String] = []) throws {
         try mpvQueue.sync {
             guard mpv != nil, !isDestroyed else {
                 throw MPVError.commandFailed("loadfile")
+            }
+
+            // Video track selection for the upcoming file. Set as a property
+            // before the loadfile command (per-file loadfile options moved to
+            // the 4th argument in mpv 0.38+, so they can't be relied on here).
+            // Only ever changed between loads, never live - live `vid` toggling
+            // causes A/V desync (see handlePlayerSheetVisibility).
+            setPropertyUnsafe("vid", disableVideoTrack ? "no" : "auto")
+            if disableVideoTrack {
+                logDebug("Video track disabled for this load (audio mode)")
             }
 
             // Set HTTP headers as a property before loading (if provided)
@@ -981,6 +1035,14 @@ final class MPVClient: @unchecked Sendable {
         var videoSpeedCorrection: Double?
         var audioSpeedCorrection: Double?
         var framedrop: String?
+        var audioDelay: Double?
+        var currentVo: String?
+        var currentAo: String?
+        var audioDevice: String?
+        var displayWidth: Int?
+        var displayHeight: Int?
+        var displayNames: String?
+        var decoderFrameDropCount: Int?
     }
 
     /// Fetch all debug properties in a single sync block to avoid multiple lock acquisitions.
@@ -1052,6 +1114,14 @@ final class MPVClient: @unchecked Sendable {
             props.videoSpeedCorrection = getDouble("video-speed-correction")
             props.audioSpeedCorrection = getDouble("audio-speed-correction")
             props.framedrop = getString("framedrop")
+            props.audioDelay = getDouble("audio-delay")
+            props.currentVo = getString("current-vo")
+            props.currentAo = getString("current-ao")
+            props.audioDevice = getString("audio-device")
+            props.displayWidth = getInt("display-width")
+            props.displayHeight = getInt("display-height")
+            props.displayNames = getString("display-names")
+            props.decoderFrameDropCount = getInt("decoder-frame-drop-count")
             #endif
 
             return props
@@ -1281,8 +1351,16 @@ final class MPVClient: @unchecked Sendable {
                 props.videoSpeedCorrection = getDouble("video-speed-correction")
                 props.audioSpeedCorrection = getDouble("audio-speed-correction")
                 props.framedrop = getString("framedrop")
+                props.audioDelay = getDouble("audio-delay")
+                props.currentVo = getString("current-vo")
+                props.currentAo = getString("current-ao")
+                props.audioDevice = getString("audio-device")
+                props.displayWidth = getInt("display-width")
+                props.displayHeight = getInt("display-height")
+                props.displayNames = getString("display-names")
+                props.decoderFrameDropCount = getInt("decoder-frame-drop-count")
                 #endif
-                
+
                 continuation.resume(returning: props)
             }
         }

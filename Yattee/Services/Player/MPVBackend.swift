@@ -120,9 +120,15 @@ final class MPVBackend: PlayerBackend {
     private let bufferStallTimeout: TimeInterval = 30  // Trigger refresh after 30 seconds of stall
     private var bufferStallCheckTask: Task<Void, Never>?
 
+    // Periodic playback stats logging so exported user logs can diagnose
+    // stuttering / cache starvation remotely (GitHub #947/#949)
+    private var playbackStatsTask: Task<Void, Never>?
+
     // Video dimensions for aspect ratio detection
     private var videoWidth: Int = 0
     private var videoHeight: Int = 0
+    // Coalesces separate width/height property events into one PiP size update
+    private var pipVideoSizeUpdateTask: Task<Void, Never>?
     // Cached video FPS to avoid sync fetch on main thread
     private var containerFps: Double = 0
     // Cached cache state to avoid sync fetch on main thread
@@ -378,6 +384,7 @@ final class MPVBackend: PlayerBackend {
     private func cleanup() {
         // Stop buffer stall detection
         stopBufferStallDetection()
+        stopPlaybackStatsLogging()
 
         #if os(macOS)
         // Clear MPV client callbacks before destroying - these reference the render view
@@ -488,7 +495,13 @@ final class MPVBackend: PlayerBackend {
 
         // Load the stream
         do {
-            try mpvClient?.loadFile(stream.url, audioURL: audioStream?.url, httpHeaders: stream.httpHeaders, useEDL: useEDL)
+            try mpvClient?.loadFile(
+                stream.url,
+                audioURL: audioStream?.url,
+                httpHeaders: stream.httpHeaders,
+                useEDL: useEDL,
+                disableVideoTrack: stream.requiresVideoTrackDisabled
+            )
             
             // Give MPV a moment to process the loadfile command
             try await Task.sleep(for: .milliseconds(100))
@@ -749,6 +762,7 @@ final class MPVBackend: PlayerBackend {
 
         // Stop buffer stall detection
         stopBufferStallDetection()
+        stopPlaybackStatsLogging()
 
         mpvClient?.stop()
         isPlaying = false
@@ -902,6 +916,12 @@ final class MPVBackend: PlayerBackend {
         mpvClient?.updateSubtitleSettings()
     }
 
+    /// Push the current tvOS audio-delay setting into the running MPV instance.
+    /// Caller passes milliseconds; MPVClient converts to seconds.
+    func updateAudioDelay(milliseconds: Double) {
+        mpvClient?.updateAudioDelay(milliseconds: milliseconds)
+    }
+
     /// Get the actual video track dimensions from MPV.
     /// Returns (width, height) or nil if not available.
     func getVideoSize() -> (width: Int, height: Int)? {
@@ -963,6 +983,14 @@ final class MPVBackend: PlayerBackend {
         stats.audioSpeedCorrection = props.audioSpeedCorrection
         stats.framedrop = props.framedrop
         stats.displayLinkFps = renderView?.displayLinkTargetFPS
+        stats.audioDelay = props.audioDelay
+        stats.currentVo = props.currentVo
+        stats.currentAo = props.currentAo
+        stats.audioDevice = props.audioDevice
+        stats.displayWidth = props.displayWidth
+        stats.displayHeight = props.displayHeight
+        stats.displayNames = props.displayNames
+        stats.decoderFrameDropCount = props.decoderFrameDropCount
         #endif
 
         return stats
@@ -970,7 +998,7 @@ final class MPVBackend: PlayerBackend {
 
     // MARK: - Background Playback
 
-    func handleScenePhase(_ phase: ScenePhase, backgroundEnabled: Bool, isPiPActive: Bool) {
+    func handleScenePhase(_ phase: ScenePhase, isPiPActive: Bool) {
         #if os(iOS)
         let pipActive = self.isPiPActive || isPiPActive
         #else
@@ -980,8 +1008,8 @@ final class MPVBackend: PlayerBackend {
         MPVLogging.logAppLifecycle("handleScenePhase(\(phase))",
             isPiPActive: pipActive, isRendering: nil)
 
-        guard backgroundEnabled, !pipActive else {
-            MPVLogging.log("handleScenePhase: skipping (bgEnabled:\(backgroundEnabled) pip:\(pipActive))")
+        guard !pipActive else {
+            MPVLogging.log("handleScenePhase: skipping (pip:\(pipActive))")
             return
         }
 
@@ -1221,9 +1249,14 @@ final class MPVBackend: PlayerBackend {
 
         // Only proceed with actual setup if not already done and view is in window
         guard !isPiPSetUp, containerView.window != nil else {
-            // If already set up but playerState changed, update isPiPPossible
-            if isPiPSetUp, let playerState {
-                playerState.isPiPPossible = isPiPPossible
+            if isPiPSetUp {
+                // Re-wire bridge callbacks in case stop() cleared them since
+                // setup (the backend is reused across videos)
+                wirePiPBridgeCallbacks()
+                // If playerState changed, update isPiPPossible
+                if let playerState {
+                    playerState.isPiPPossible = isPiPPossible
+                }
             }
             return
         }
@@ -1256,6 +1289,20 @@ final class MPVBackend: PlayerBackend {
         // Set up the bridge with this backend and the container
         pipBridge.setup(backend: self, in: containerView)
 
+        wirePiPBridgeCallbacks()
+
+        // Manually notify current state now that callbacks are set up
+        pipBridge.notifyPiPPossibleState()
+    }
+
+    /// (Re)connect the PiP bridge callbacks. stop() clears them to prevent
+    /// crashes during window close, but the backend is reused across videos,
+    /// so they must be wired again before the next PiP session — otherwise
+    /// PiP starts without notifying PlayerService and the player window
+    /// stays visible alongside the PiP window.
+    private func wirePiPBridgeCallbacks() {
+        guard let pipBridge else { return }
+
         // Use the restore callback set by PlayerService
         pipBridge.onRestoreUserInterface = { [weak self] in
             await self?.onRestoreFromPiP?()
@@ -1270,6 +1317,12 @@ final class MPVBackend: PlayerBackend {
                 self?.onPiPDidStart?()
             } else {
                 self?._playerView?.captureFramesForPiP = false
+                // The layer was cleared to black when PiP started and macOS
+                // drawing is pull-based — force a repaint so the restored
+                // window shows the current frame even while paused. If the
+                // view isn't in a window yet, the forced draw stays armed and
+                // the setFrameSize/viewDidMoveToWindow retries complete it.
+                self?._playerView?.resumeRendering()
             }
         }
 
@@ -1303,9 +1356,6 @@ final class MPVBackend: PlayerBackend {
         pipBridge.onPiPRenderSizeChanged = { [weak self] size in
             self?._playerView?.updatePiPTargetSize(size)
         }
-
-        // Manually notify current state now that callbacks are set up
-        pipBridge.notifyPiPPossibleState()
     }
 
     /// Start Picture-in-Picture.
@@ -1314,6 +1364,10 @@ final class MPVBackend: PlayerBackend {
             LoggingService.shared.warning("MPV (macOS): Cannot start PiP - not set up", category: .mpv)
             return
         }
+
+        // Re-wire bridge callbacks in case stop() cleared them since setup
+        // (the backend is reused across videos)
+        wirePiPBridgeCallbacks()
 
         // Enable frame capture for PiP - start capturing BEFORE requesting PiP
         _playerView?.captureFramesForPiP = true
@@ -1706,17 +1760,28 @@ extension MPVBackend: MPVClientDelegate {
         LoggingService.shared.debug("MPV: Video size detected: \(videoWidth)x\(videoHeight)", category: .mpv)
         delegate?.backend(self, didUpdateVideoSize: videoWidth, height: videoHeight)
 
-        // Update PiP bridge with video aspect ratio for proper window sizing
+        // Update PiP capture dimensions and aspect ratio, coalesced.
+        // Width and height arrive as separate MPV property events and the old
+        // values are kept across video switches, so right after a switch one of
+        // them can still be stale (e.g. new width paired with old height).
+        // Debounce so capture buffers and the PiP window never see that
+        // transient mixed size.
         #if os(iOS) || os(macOS)
-        let aspectRatio = CGFloat(videoWidth) / CGFloat(videoHeight)
-        pipBridge?.updateVideoAspectRatio(aspectRatio)
-        #endif
-
-        // Update render view with video content dimensions for accurate PiP capture
-        // (avoids capturing letterbox/pillarbox black bars)
-        #if os(iOS) || os(macOS)
-        renderView?.videoContentWidth = videoWidth
-        renderView?.videoContentHeight = videoHeight
+        pipVideoSizeUpdateTask?.cancel()
+        pipVideoSizeUpdateTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard let self, !Task.isCancelled else { return }
+            let width = self.videoWidth
+            let height = self.videoHeight
+            guard width > 0, height > 0 else { return }
+            // Content dimensions must update before the aspect ratio: on macOS
+            // the aspect update flushes the PiP sample buffer during active PiP,
+            // and a stale-sized frame captured afterwards would make AVKit
+            // re-read the old dimensions.
+            self.renderView?.videoContentWidth = width
+            self.renderView?.videoContentHeight = height
+            self.pipBridge?.updateVideoAspectRatio(CGFloat(width) / CGFloat(height))
+        }
         #endif
 
         // Update render view with video FPS for display link frame rate matching
@@ -1822,6 +1887,7 @@ extension MPVBackend: MPVClientDelegate {
         switch event {
         case MPV_EVENT_FILE_LOADED:
             LoggingService.shared.debug("MPV: File loaded", category: .mpv)
+            startPlaybackStatsLogging()
             // Log hwdec diagnostics on tvOS (use cached values to avoid sync fetch)
             #if os(tvOS)
             let codec = videoCodec.isEmpty ? "unknown" : videoCodec
@@ -1984,5 +2050,137 @@ extension MPVBackend: MPVClientDelegate {
         bufferStallCheckTask = nil
         bufferStallStartTime = nil
         LoggingService.shared.debug("MPV: Buffer stall detection stopped", category: .mpv)
+    }
+
+    // MARK: - Playback Stats Logging
+
+    /// Log cache/frame-drop/pacing stats every 10s while a file is loaded, at INFO level
+    /// so they appear in user-exported logs (diagnostics for GitHub #947/#949).
+    /// Only logs while verbose MPV logging is enabled in settings.
+    private func startPlaybackStatsLogging() {
+        guard playbackStatsTask == nil else { return }
+
+        playbackStatsTask = Task { @MainActor [weak self] in
+            #if os(macOS)
+            var previousHealth: MPVRenderHealth?
+            var previousVoDrops: Int?
+            var watchdogFiredLastTick = false
+            #endif
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard let self, !Task.isCancelled, let client = self.mpvClient else { return }
+
+                let props = await client.getDebugPropertiesAsync()
+
+                #if os(macOS)
+                // Render watchdog — runs every tick regardless of the verbose
+                // gate. Detects a stalled video output: playback advancing and
+                // frames being consumed (skip-render) or dropped by the VO,
+                // but not a single successful draw since the last tick. That
+                // is the "permanent black video" signature (shared render view
+                // parented in a non-visible window); attempt recovery by
+                // re-attaching the view to a visible container.
+                let health = self._playerView?.renderHealthSnapshot()
+                if let health {
+                    let drawsDelta = health.draws &- (previousHealth?.draws ?? health.draws)
+                    let skipsDelta = health.skips &- (previousHealth?.skips ?? health.skips)
+                    let voDrops = props.frameDropCount
+                    let voDropsDelta = (voDrops ?? 0) - (previousVoDrops ?? voDrops ?? 0)
+
+                    if watchdogFiredLastTick {
+                        let outcome = drawsDelta > 0 ? "succeeded" : "failed"
+                        LoggingService.shared.warning(
+                            "MPV render watchdog: recovery \(outcome) (draws=+\(drawsDelta), skips=+\(skipsDelta), attach: \(self._playerView?.attachmentDescription ?? "no view"))",
+                            category: .mpv
+                        )
+                        watchdogFiredLastTick = false
+                    }
+
+                    if self.isPlaying, !self.isPiPActive, previousHealth != nil,
+                       drawsDelta == 0, skipsDelta > 20 || voDropsDelta > 50 {
+                        LoggingService.shared.warning(
+                            "MPV render watchdog: video output stalled (draws=+0, skips=+\(skipsDelta), voDrops=+\(voDropsDelta), attach: \(self._playerView?.attachmentDescription ?? "no view")) - attempting recovery",
+                            category: .mpv
+                        )
+                        MPVContainerNSView.recoverSharedPlayerViewIfNeeded()
+                        self._playerView?.resumeRendering()
+                        watchdogFiredLastTick = true
+                    }
+
+                    previousVoDrops = voDrops ?? previousVoDrops
+                }
+
+                // Misplaced-view check: the player window is on screen but the
+                // shared render view lives in a different window (e.g. the mini
+                // capsule preview grabbed it during an expand race). Draws look
+                // healthy, yet the player window shows black.
+                if !self.isPiPActive,
+                   let playerWindow = ExpandedPlayerWindowManager.shared.currentPlayerWindow,
+                   playerWindow.isVisible,
+                   let view = self._playerView, view.window !== playerWindow {
+                    LoggingService.shared.warning(
+                        "MPV render watchdog: player view outside visible player window (attach: \(view.attachmentDescription)) - re-attaching",
+                        category: .mpv
+                    )
+                    if MPVContainerNSView.recoverSharedPlayerViewIfNeeded() {
+                        self.resumeRendering()
+                    }
+                }
+                #endif
+
+                // Gate on the verbose setting each tick (not at task start) so
+                // toggling it mid-playback takes effect without a reload
+                guard MPVLogging.verboseEnabled else {
+                    #if os(macOS)
+                    previousHealth = health
+                    #endif
+                    continue
+                }
+
+                func megabytes(_ bytes: Int64) -> String {
+                    String(format: "%.1fMiB", Double(bytes) / 1_048_576)
+                }
+
+                var parts: [String] = ["paused=\(!self.isPlaying)"]
+                if let hwdec = props.hwdecCurrent { parts.append("hwdec=\(hwdec)") }
+                if let fps = props.estimatedVfFps { parts.append(String(format: "vf-fps=%.2f", fps)) }
+                if let avsync = props.avsync { parts.append(String(format: "avsync=%.3f", avsync)) }
+                var drops: [String] = []
+                if let vo = props.frameDropCount { drops.append("vo=\(vo)") }
+                if let dec = props.decoderFrameDropCount { drops.append("dec=\(dec)") }
+                if let mistimed = props.mistimedFrameCount { drops.append("mistimed=\(mistimed)") }
+                if let delayed = props.voDelayedFrameCount { drops.append("delayed=\(delayed)") }
+                if !drops.isEmpty { parts.append("dropped(\(drops.joined(separator: " ")))") }
+                var cache: [String] = []
+                if let duration = props.demuxerCacheDuration { cache.append(String(format: "dur=%.1fs", duration)) }
+                if let state = props.cacheState {
+                    cache.append("fw=\(megabytes(state.forwardBytes))")
+                    cache.append("rate=\(megabytes(state.inputRate))/s")
+                    cache.append("eof=\(state.eofCached)")
+                }
+                if !cache.isEmpty { parts.append("cache(\(cache.joined(separator: " ")))") }
+
+                #if os(macOS)
+                if let health {
+                    let drawsDelta = health.draws &- (previousHealth?.draws ?? health.draws)
+                    let skipsDelta = health.skips &- (previousHealth?.skips ?? health.skips)
+                    let droppedDelta = health.droppedDraws &- (previousHealth?.droppedDraws ?? health.droppedDraws)
+                    parts.append("render(draws=+\(drawsDelta) skips=+\(skipsDelta) dropped=+\(droppedDelta))")
+                }
+                if let view = self._playerView {
+                    parts.append("attach(\(view.attachmentDescription))")
+                }
+                previousHealth = health
+                #endif
+
+                LoggingService.shared.info("MPV playback stats: \(parts.joined(separator: " "))", category: .mpv)
+            }
+        }
+    }
+
+    /// Stop periodic playback stats logging.
+    private func stopPlaybackStatsLogging() {
+        playbackStatsTask?.cancel()
+        playbackStatsTask = nil
     }
 }

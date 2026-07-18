@@ -9,23 +9,22 @@
 
 import SwiftUI
 
-/// Condensed QuickTime-style control bar with transport, timeline, and action controls.
+/// Condensed QuickTime-style control bar with a preset-driven button row and timeline.
 struct MacOSControlBar: View {
     @Bindable var playerState: PlayerState
 
+    // MARK: - Layout & Actions
+
+    /// The button row rendered above the timeline, from the active preset's bottom section.
+    let section: LayoutSection
+    /// Global appearance settings from the active preset.
+    let globalSettings: GlobalLayoutSettings
+    /// Consolidated actions and state for the section renderer.
+    let actions: PlayerControlsActions
+
     // MARK: - Callbacks
 
-    let onPlayPause: () -> Void
     let onSeek: (TimeInterval) async -> Void
-    let onSeekForward: (TimeInterval) async -> Void
-    let onSeekBackward: (TimeInterval) async -> Void
-    var onToggleFullscreen: (() -> Void)? = nil
-    var isFullscreen: Bool = false
-    var onTogglePiP: (() -> Void)? = nil
-    var onPlayNext: (() async -> Void)? = nil
-    var onVolumeChanged: ((Float) -> Void)? = nil
-    var onMuteToggled: (() -> Void)? = nil
-    var onShowSettings: (() -> Void)? = nil
     /// Whether to show chapter markers on the progress bar (default: true)
     var showChapters: Bool = true
     /// SponsorBlock segments to display on the progress bar.
@@ -46,24 +45,12 @@ struct MacOSControlBar: View {
     @State private var dragProgress: Double = 0
     @State private var isHoveringProgress = false
     @State private var hoverProgress: Double = 0
-    @State private var playNextTapCount = 0
-    @State private var seekBackwardTrigger = 0
-    @State private var seekForwardTrigger = 0
 
     // MARK: - Computed Properties
 
-    /// Whether transport controls should be disabled
-    private var isTransportDisabled: Bool {
-        playerState.isTransportDisabled
-    }
-
-    private var playPauseIcon: String {
-        switch playerState.playbackState {
-        case .playing:
-            return "pause.fill"
-        default:
-            return "play.fill"
-        }
+    /// Whether the controls are locked (playback buttons/gestures disabled except Settings).
+    private var isLocked: Bool {
+        playerState.isControlsLocked
     }
 
     private var displayProgress: Double {
@@ -79,8 +66,13 @@ struct MacOSControlBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Top row: volume | transport (centered) | actions
-            topRowControls
+            // Top row: preset-driven button row
+            MacOSControlsSectionRenderer(
+                section: section,
+                actions: actions,
+                globalSettings: globalSettings,
+                context: .bar
+            )
 
             // Bottom row: timeline (expanded width)
             timelineControls
@@ -88,122 +80,51 @@ struct MacOSControlBar: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(maxWidth: 500)
-        .glassBackground(.regular, in: .rect(cornerRadius: 16))
+        .glassBackground(.regular, in: .rect(cornerRadius: 16), colorScheme: globalSettings.controlBarTheme.colorScheme)
         .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
-        // Seek preview overlay - positioned above the control bar
+        // Seek preview overlay - positioned just above the progress bar (overlapping the bar)
         .overlay(alignment: .bottom) {
             if (isDragging || isHoveringProgress), !playerState.isLive {
                 GeometryReader { geometry in
                     let pos = seekPreviewPosition(geometry: geometry, previewWidth: playerState.preferredStoryboard != nil ? 176 : 80)
+                    // Position previews just above the progress bar so they overlap the control
+                    // bar (button row) rather than floating above the whole pill. Measured up from
+                    // the pill bottom, so it stays correct regardless of button-row height.
+                    // Bottom inset = pill bottom padding (10) + timeline row height (~20).
+                    let progressBarTop = geometry.size.height - 30
+                    let previewGap: CGFloat = 6
+                    let capsuleDelta: CGFloat = 26
 
                     if let storyboard = playerState.preferredStoryboard {
+                        let previewY = progressBarTop - 102 - previewGap // storyboard preview height ~102
+
                         seekPreviewView(storyboard: storyboard)
-                            .offset(x: pos.clampedX, y: -150)
+                            .offset(x: pos.clampedX, y: previewY)
 
                         if showChapters, let chapter = playerState.chapters.last(where: { $0.startTime <= pos.progress * playerState.duration }) {
                             ChapterCapsuleView(title: chapter.title, buttonBackground: .none)
                                 .positioned(xTarget: pos.centerX, availableWidth: geometry.size.width)
-                                .offset(y: -176)
+                                .offset(y: previewY - capsuleDelta)
                         }
                     } else {
+                        let previewY = progressBarTop - 32 - previewGap // time pill height ~32
+
                         SeekTimePreviewView(
                             seekTime: pos.progress * playerState.duration,
                             buttonBackground: .none,
                             theme: .dark
                         )
-                        .offset(x: pos.clampedX, y: -60)
+                        .offset(x: pos.clampedX, y: previewY)
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
                         .animation(.easeInOut(duration: 0.15), value: isDragging || isHoveringProgress)
 
                         if showChapters, let chapter = playerState.chapters.last(where: { $0.startTime <= pos.progress * playerState.duration }) {
                             ChapterCapsuleView(title: chapter.title, buttonBackground: .none)
                                 .positioned(xTarget: pos.centerX, availableWidth: geometry.size.width)
-                                .offset(y: -86)
+                                .offset(y: previewY - capsuleDelta)
                         }
                     }
                 }
-            }
-        }
-    }
-
-    // MARK: - Top Row Controls
-
-    private var topRowControls: some View {
-        HStack(spacing: 0) {
-            // Left: Volume controls
-            volumeControls
-
-            Spacer()
-
-            // Center: Transport controls
-            transportControls
-
-            Spacer()
-
-            // Right: Action buttons (settings, PiP, fullscreen)
-            trailingActionControls
-        }
-    }
-
-    // MARK: - Transport Controls
-
-    private var transportControls: some View {
-        HStack(spacing: 4) {
-            // Skip backward
-            Button {
-                seekBackwardTrigger += 1
-                Task { await onSeekBackward(10) }
-            } label: {
-                Image(systemName: "10.arrow.trianglehead.counterclockwise")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-                    .symbolEffect(.rotate.byLayer, options: .speed(2).nonRepeating, value: seekBackwardTrigger)
-            }
-            .buttonStyle(MacOSControlButtonStyle())
-            .disabled(isTransportDisabled)
-
-            // Play/Pause
-            Button {
-                onPlayPause()
-            } label: {
-                Image(systemName: playPauseIcon)
-                    .font(.system(size: 16, weight: .medium))
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-                    .contentTransition(.symbolEffect(.replace, options: .speed(2)))
-            }
-            .buttonStyle(MacOSControlButtonStyle())
-            .disabled(isTransportDisabled)
-            .opacity(isTransportDisabled ? 0.3 : 1.0)
-
-            // Skip forward
-            Button {
-                seekForwardTrigger += 1
-                Task { await onSeekForward(10) }
-            } label: {
-                Image(systemName: "10.arrow.trianglehead.clockwise")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-                    .symbolEffect(.rotate.byLayer, options: .speed(2).nonRepeating, value: seekForwardTrigger)
-            }
-            .buttonStyle(MacOSControlButtonStyle())
-            .disabled(isTransportDisabled)
-
-            // Play next (if queue has items)
-            if let onPlayNext, playerState.hasNext {
-                Button {
-                    playNextTapCount += 1
-                    Task { await onPlayNext() }
-                } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.system(size: 12, weight: .medium))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                        .symbolEffect(.bounce.down.byLayer, options: .nonRepeating, value: playNextTapCount)
-                }
-                .buttonStyle(MacOSControlButtonStyle())
             }
         }
     }
@@ -225,7 +146,7 @@ struct MacOSControlBar: View {
             } else {
                 // Current time
                 Text(playerState.formattedCurrentTime)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(globalSettings.fontStyle.font(size: 11, weight: .medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .fixedSize()
@@ -235,7 +156,7 @@ struct MacOSControlBar: View {
 
                 // Duration
                 Text(playerState.formattedDuration)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(globalSettings.fontStyle.font(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .fixedSize()
@@ -274,6 +195,7 @@ struct MacOSControlBar: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
+                        guard !isLocked else { return }
                         if !isDragging {
                             isDragging = true
                             onInteractionStarted?()
@@ -282,6 +204,7 @@ struct MacOSControlBar: View {
                         dragProgress = progress
                     }
                     .onEnded { value in
+                        guard !isLocked else { return }
                         isDragging = false
                         let progress = max(0, min(1, value.location.x / geometry.size.width))
                         let seekTime = progress * playerState.duration
@@ -298,8 +221,10 @@ struct MacOSControlBar: View {
                     isHoveringProgress = false
                 }
             }
+            .allowsHitTesting(!isLocked)
         }
         .frame(height: 20)
+        .opacity(isLocked ? 0.5 : 1.0)
     }
 
     private func seekPreviewPosition(
@@ -333,129 +258,41 @@ struct MacOSControlBar: View {
         .animation(.easeInOut(duration: 0.15), value: isDragging || isHoveringProgress)
     }
 
-    // MARK: - Trailing Action Controls
-
-    private var trailingActionControls: some View {
-        HStack(spacing: 4) {
-            // Settings
-            if let onShowSettings {
-                Button {
-                    onShowSettings()
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(MacOSControlButtonStyle())
-            }
-
-            // PiP
-            if let onTogglePiP, playerState.isPiPPossible {
-                Button {
-                    onTogglePiP()
-                } label: {
-                    Image(systemName: playerState.pipState == .active ? "pip.exit" : "pip.enter")
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(MacOSControlButtonStyle())
-            }
-
-            // Fullscreen
-            if let onToggleFullscreen {
-                Button {
-                    onToggleFullscreen()
-                } label: {
-                    Image(systemName: isFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(MacOSControlButtonStyle())
-            }
-        }
-    }
-
-    private var volumeControls: some View {
-        HStack(spacing: 2) {
-            // Mute/unmute button
-            Button {
-                onMuteToggled?()
-            } label: {
-                Image(systemName: volumeIcon)
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 24, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(MacOSControlButtonStyle())
-
-            // Volume slider
-            Slider(
-                value: Binding(
-                    get: { Double(playerState.volume) },
-                    set: { newValue in
-                        playerState.volume = Float(newValue)
-                        onVolumeChanged?(Float(newValue))
-                    }
-                ),
-                in: 0...1,
-                onEditingChanged: { editing in
-                    if editing {
-                        onInteractionStarted?()
-                    } else {
-                        onInteractionEnded?()
-                    }
-                }
-            )
-            .frame(width: 70)
-            .controlSize(.mini)
-            .disabled(playerState.isMuted)
-            .opacity(playerState.isMuted ? 0.5 : 1.0)
-        }
-    }
-
-    private var volumeIcon: String {
-        if playerState.isMuted || playerState.volume == 0 {
-            return "speaker.slash.fill"
-        } else if playerState.volume < 0.33 {
-            return "speaker.wave.1.fill"
-        } else if playerState.volume < 0.66 {
-            return "speaker.wave.2.fill"
-        } else {
-            return "speaker.wave.3.fill"
-        }
-    }
-}
-
-// MARK: - Button Style
-
-/// Subtle button style for macOS control bar buttons.
-struct MacOSControlButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(isEnabled ? .primary : .secondary)
-            .opacity(configuration.isPressed ? 0.6 : 1.0)
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
-    }
 }
 
 // MARK: - Preview
 
 #Preview {
+    let playerState = PlayerState()
+
     ZStack {
         Color.gray.opacity(0.3)
 
         MacOSControlBar(
-            playerState: PlayerState(),
-            onPlayPause: {},
-            onSeek: { _ in },
-            onSeekForward: { _ in },
-            onSeekBackward: { _ in }
+            playerState: playerState,
+            section: PlayerControlsLayout.default.bottomSection,
+            globalSettings: .default,
+            actions: PlayerControlsActions(
+                playerState: playerState,
+                isWideScreenLayout: true,
+                isFullscreen: false,
+                isWidescreenVideo: true,
+                isPanelVisible: false,
+                panelSide: .right,
+                showVolumeControls: true,
+                showDebugButton: false,
+                showCloseButton: false,
+                currentVideo: nil,
+                availableCaptions: [],
+                currentCaption: nil,
+                availableStreams: [],
+                currentStream: nil,
+                currentAudioStream: nil,
+                isAutoPlayNextEnabled: true,
+                yatteeServerURL: nil,
+                deArrowBrandingProvider: nil
+            ),
+            onSeek: { _ in }
         )
         .frame(width: 650)
     }

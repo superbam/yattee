@@ -122,21 +122,43 @@ struct QueueManagementSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
+                #if !os(macOS)
                 ToolbarItem(placement: .cancellationAction) {
                     queueModeMenu
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(role: .cancel) {
-                        performDismiss()
-                    } label: {
-                        Label(String(localized: "common.close"), systemImage: "xmark")
-                            .labelStyle(.iconOnly)
-                    }
-                }
+                sheetCloseToolbarItem { performDismiss() }
+                #endif
             }
+            #if os(macOS)
+            // On macOS the mode selector and Close button share one bottom bar,
+            // with the mode selector pinned to the leading edge so it can show
+            // both icon and text.
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 0) {
+                    Divider()
+                    HStack {
+                        queueModeMenu
+                        Spacer()
+                        Button(role: .cancel) { performDismiss() } label: {
+                            Text(String(localized: "common.close"))
+                        }
+                        .keyboardShortcut(.cancelAction)
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                }
+                .background(.bar)
+            }
+            #endif
         }
         .presentationDragIndicator(.visible)
+        #if os(iOS)
         .presentationDetents([.medium, .large])
+        #endif
+        #if os(macOS)
+        .frame(minWidth: 450, minHeight: 500)
+        #endif
     }
 
     // MARK: - Views
@@ -461,11 +483,20 @@ struct QueueManagementSheet: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: playerState?.queueMode.icon ?? "list.bullet")
+                #if os(macOS)
+                Text(playerState?.queueMode.displayName ?? QueueMode.normal.displayName)
+                #endif
                 Image(systemName: "chevron.down")
                     .font(.caption2)
             }
             .foregroundStyle(.tint)
         }
+        #if os(macOS)
+        // Default Menu style stretches full-width on macOS; keep the button
+        // hugging its label so it sits tidily in the bottom-left bar.
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        #endif
         #endif
     }
 

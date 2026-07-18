@@ -21,9 +21,9 @@ final class MPVOGLView: NSView {
     // MARK: - Properties
 
     /// The OpenGL layer that handles rendering.
-    private(set) lazy var videoLayer: MPVOpenGLLayer = {
-        MPVOpenGLLayer(videoView: self)
-    }()
+    /// `nil` when OpenGL is unavailable (e.g. a GPU-less virtual machine); the
+    /// view then renders nothing and `setup(with:)` throws instead of crashing.
+    private(set) var videoLayer: MPVOpenGLLayer?
 
     /// Reference to the MPV client.
     private weak var mpvClient: MPVClient?
@@ -44,8 +44,8 @@ final class MPVOGLView: NSView {
 
     /// Callback when first frame is rendered.
     var onFirstFrameRendered: (() -> Void)? {
-        get { videoLayer.onFirstFrameRendered }
-        set { videoLayer.onFirstFrameRendered = newValue }
+        get { videoLayer?.onFirstFrameRendered }
+        set { videoLayer?.onFirstFrameRendered = newValue }
     }
 
     // MARK: - Video Info
@@ -65,32 +65,32 @@ final class MPVOGLView: NSView {
 
     /// Whether to capture frames for PiP.
     var captureFramesForPiP: Bool {
-        get { videoLayer.captureFramesForPiP }
-        set { videoLayer.captureFramesForPiP = newValue }
+        get { videoLayer?.captureFramesForPiP ?? false }
+        set { videoLayer?.captureFramesForPiP = newValue }
     }
 
     /// Whether PiP is currently active.
     var isPiPActive: Bool {
-        get { videoLayer.isPiPActive }
-        set { videoLayer.isPiPActive = newValue }
+        get { videoLayer?.isPiPActive ?? false }
+        set { videoLayer?.isPiPActive = newValue }
     }
 
     /// Callback when a new frame is ready for PiP.
     var onFrameReady: ((CVPixelBuffer, CMTime) -> Void)? {
-        get { videoLayer.onFrameReady }
-        set { videoLayer.onFrameReady = newValue }
+        get { videoLayer?.onFrameReady }
+        set { videoLayer?.onFrameReady = newValue }
     }
 
     /// Video content width (actual video dimensions for letterbox cropping).
     var videoContentWidth: Int {
-        get { videoLayer.videoContentWidth }
-        set { videoLayer.videoContentWidth = newValue }
+        get { videoLayer?.videoContentWidth ?? 0 }
+        set { videoLayer?.videoContentWidth = newValue }
     }
 
     /// Video content height (actual video dimensions for letterbox cropping).
     var videoContentHeight: Int {
-        get { videoLayer.videoContentHeight }
-        set { videoLayer.videoContentHeight = newValue }
+        get { videoLayer?.videoContentHeight ?? 0 }
+        set { videoLayer?.videoContentHeight = newValue }
     }
 
     // MARK: - Initialization
@@ -113,10 +113,17 @@ final class MPVOGLView: NSView {
     private func commonInit() {
         // Set up layer-backed view
         wantsLayer = true
-        layer = videoLayer
 
-        // Configure layer properties
-        videoLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
+        // Create the OpenGL layer. This can fail on machines without a usable
+        // GPU (e.g. virtual machines), in which case the view renders nothing
+        // and setup(with:) will throw rather than crashing the app at launch.
+        if let videoLayer = MPVOpenGLLayer(videoView: self) {
+            self.videoLayer = videoLayer
+            layer = videoLayer
+            videoLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
+        } else {
+            LoggingService.shared.error("MPVOGLView: OpenGL unavailable - video rendering disabled", category: .mpv)
+        }
 
         // Configure view properties
         autoresizingMask = [.width, .height]
@@ -131,6 +138,11 @@ final class MPVOGLView: NSView {
     /// Set up with an MPV client.
     func setup(with client: MPVClient) throws {
         self.mpvClient = client
+
+        // No layer means OpenGL was unavailable at init (e.g. GPU-less VM).
+        guard let videoLayer else {
+            throw MPVRenderError.openGLSetupFailed
+        }
 
         // Set up the layer
         try videoLayer.setup(with: client)
@@ -157,7 +169,13 @@ final class MPVOGLView: NSView {
             startDisplayLink()
 
             // Update contents scale for new window
-            videoLayer.contentsScale = window.backingScaleFactor
+            videoLayer?.contentsScale = window.backingScaleFactor
+
+            // Reattaching (e.g. macOS player sheet dismissed via ESC then re-expanded)
+            // detaches this shared view without stopping playback. macOS drawing is
+            // pull-based, so force a redraw to repaint the current frame — otherwise
+            // the layer stays black until MPV emits a new frame (never, if paused).
+            resumeRendering()
         }
     }
 
@@ -166,11 +184,24 @@ final class MPVOGLView: NSView {
 
         // Update contents scale when backing properties change
         if let scale = window?.backingScaleFactor {
-            videoLayer.contentsScale = scale
+            videoLayer?.contentsScale = scale
         }
 
         // Update display refresh rate
         updateDisplayRefreshRate()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+
+        // If a forced draw was requested while the layer had no size/drawable
+        // (shared view re-parented into the deferred expanded sheet), repaint
+        // on the first non-zero layout. Gated on hasPendingForcedDraw so
+        // ordinary resizes don't trigger redundant redraws.
+        guard newSize.width > 0, newSize.height > 0,
+              let videoLayer, videoLayer.hasPendingForcedDraw else { return }
+        LoggingService.shared.debug("MPVOGLView: retrying pending forced draw after resize to \(newSize)", category: .mpv)
+        videoLayer.update(force: true)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -238,12 +269,32 @@ final class MPVOGLView: NSView {
     /// Reset first frame tracking (call when loading new content).
     func resetFirstFrameTracking() {
         mpvHasFrameReady = false
-        videoLayer.resetFirstFrameTracking()
+        videoLayer?.resetFirstFrameTracking()
+    }
+
+    /// Thread-safe snapshot of the layer's render-health counters.
+    func renderHealthSnapshot() -> MPVRenderHealth? {
+        videoLayer?.renderHealthSnapshot()
+    }
+
+    /// Human-readable description of where this shared view is currently
+    /// attached, for render-health diagnostics. Main thread only.
+    var attachmentDescription: String {
+        let superviewDesc: String
+        if let container = superview as? MPVContainerNSView {
+            superviewDesc = "container=\(container.shortID)"
+        } else if let superview {
+            superviewDesc = "superview=\(type(of: superview))"
+        } else {
+            superviewDesc = "superview=nil"
+        }
+        let windowDesc = window.map { "window=#\($0.windowNumber) visible=\($0.isVisible)" } ?? "window=nil"
+        return "\(superviewDesc) \(windowDesc) bounds=\(Int(bounds.width))x\(Int(bounds.height))"
     }
 
     /// Clear the view to black.
     func clearToBlack() {
-        videoLayer.clearToBlack()
+        videoLayer?.clearToBlack()
     }
 
     /// Pause rendering.
@@ -254,12 +305,12 @@ final class MPVOGLView: NSView {
 
     /// Resume rendering.
     func resumeRendering() {
-        videoLayer.update(force: true)
+        videoLayer?.update(force: true)
     }
 
     /// Update cached time position for PiP timestamps.
     func updateTimePosition(_ time: Double) {
-        videoLayer.updateTimePosition(time)
+        videoLayer?.updateTimePosition(time)
     }
 
     /// Clear the main view for PiP transition (stub for now).
@@ -269,7 +320,7 @@ final class MPVOGLView: NSView {
 
     /// Update PiP target render size - forces recreation of PiP capture resources.
     func updatePiPTargetSize(_ size: CMVideoDimensions) {
-        videoLayer.updatePiPTargetSize(size)
+        videoLayer?.updatePiPTargetSize(size)
     }
 
     // MARK: - Cleanup
@@ -283,7 +334,7 @@ final class MPVOGLView: NSView {
         isUninited = true
 
         stopDisplayLink()
-        videoLayer.uninit()
+        videoLayer?.uninit()
 
         // Note: onFirstFrameRendered and onFrameReady are forwarded to videoLayer,
         // and videoLayer.uninit() clears them

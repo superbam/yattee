@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct AppearanceSettingsView: View {
     @Environment(\.appEnvironment) private var appEnvironment
@@ -140,22 +143,65 @@ private struct AppIconPickerView: View {
 
 // MARK: - Accent Color Section
 
+private enum AccentColorTarget {
+    case light, dark
+}
+
 private struct AccentColorSection: View {
     @Bindable var settings: SettingsManager
 
     var body: some View {
         SettingsFormSection("settings.appearance.accentColor.header") {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 50))], spacing: 16) {
-                ForEach(AccentColor.allCases, id: \.self) { accentColor in
-                    AccentColorButton(
-                        accentColor: accentColor,
-                        isSelected: settings.accentColor == accentColor,
-                        onSelect: { settings.accentColor = accentColor }
-                    )
-                }
+            #if !os(tvOS)
+            Toggle(isOn: $settings.useSeparateDarkAccentColor) {
+                Text(String(localized: "settings.appearance.accentColor.separateColors"))
             }
-            .padding(.vertical, 8)
+            #endif
+
+            if settings.useSeparateDarkAccentColor {
+                Text(String(localized: "settings.appearance.accentColor.light"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                AccentColorGrid(settings: settings, target: .light)
+
+                Text(String(localized: "settings.appearance.accentColor.dark"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                AccentColorGrid(settings: settings, target: .dark)
+            } else {
+                AccentColorGrid(settings: settings, target: .light)
+            }
         }
+    }
+}
+
+private struct AccentColorGrid: View {
+    @Bindable var settings: SettingsManager
+    let target: AccentColorTarget
+
+    private var selection: Binding<AccentColor> {
+        target == .light ? $settings.accentColor : $settings.accentColorDark
+    }
+
+    private var customColor: Binding<Color> {
+        target == .light ? $settings.customAccentColor : $settings.customAccentColorDark
+    }
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 50))], spacing: 16) {
+            ForEach(AccentColor.presets, id: \.self) { accentColor in
+                AccentColorButton(
+                    accentColor: accentColor,
+                    isSelected: selection.wrappedValue == accentColor,
+                    onSelect: { selection.wrappedValue = accentColor }
+                )
+            }
+
+            #if !os(tvOS)
+            CustomAccentColorButton(selection: selection, customColor: customColor)
+            #endif
+        }
+        .padding(.vertical, 8)
     }
 }
 
@@ -222,6 +268,111 @@ private struct AccentColorButton: View {
     }
 }
 
+// MARK: - Custom Accent Color Button
+
+#if !os(tvOS)
+private struct CustomAccentColorButton: View {
+    @Binding var selection: AccentColor
+    @Binding var customColor: Color
+
+    private var isSelected: Bool { selection == .custom }
+
+    #if os(macOS)
+    var body: some View {
+        Button {
+            selection = .custom
+            ColorPanelBridge.shared.open(with: NSColor(customColor)) { nsColor in
+                customColor = Color(nsColor: nsColor)
+                selection = .custom
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .strokeBorder(
+                        AngularGradient(
+                            colors: [.red, .yellow, .green, .cyan, .blue, .purple, .red],
+                            center: .center
+                        ),
+                        lineWidth: 4
+                    )
+                    .frame(width: 40, height: 40)
+
+                Circle()
+                    .fill(customColor)
+                    .frame(width: 28, height: 28)
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "settings.appearance.accentColor.custom"))
+    }
+    #else
+    private var pickedColor: Binding<Color> {
+        Binding(
+            get: { customColor },
+            set: { newColor in
+                customColor = newColor
+                selection = .custom
+            }
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(customColor)
+                .frame(width: 40, height: 40)
+                .opacity(isSelected ? 1 : 0)
+
+            ColorPicker(
+                String(localized: "settings.appearance.accentColor.custom"),
+                selection: pickedColor,
+                supportsOpacity: false
+            )
+            .labelsHidden()
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+                    .allowsHitTesting(false)
+            }
+        }
+        .accessibilityLabel(String(localized: "settings.appearance.accentColor.custom"))
+    }
+    #endif
+}
+
+#if os(macOS)
+/// Routes NSColorPanel target/action callbacks to the settings binding.
+/// NSColorPanel keeps only a weak target, so this must outlive the view.
+@MainActor
+private final class ColorPanelBridge: NSObject {
+    static let shared = ColorPanelBridge()
+    private var onChange: ((NSColor) -> Void)?
+
+    func open(with color: NSColor, onChange: @escaping (NSColor) -> Void) {
+        self.onChange = onChange
+        let panel = NSColorPanel.shared
+        panel.showsAlpha = false
+        panel.color = color
+        panel.setTarget(self)
+        panel.setAction(#selector(colorChanged(_:)))
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func colorChanged(_ sender: NSColorPanel) {
+        onChange?(sender.color)
+    }
+}
+#endif
+#endif
+
 // MARK: - Theme Display Names
 
 extension AppTheme {
@@ -251,6 +402,7 @@ extension AccentColor {
         case .blue: return String(localized: "settings.appearance.accentColor.blue")
         case .purple: return String(localized: "settings.appearance.accentColor.purple")
         case .indigo: return String(localized: "settings.appearance.accentColor.indigo")
+        case .custom: return String(localized: "settings.appearance.accentColor.custom")
         }
     }
 }

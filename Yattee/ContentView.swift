@@ -57,11 +57,34 @@ struct ContentView: View {
             // Mini player overlay (macOS only)
             #if os(macOS)
             miniPlayerOverlay(appEnvironment: appEnvironment)
+
+            // Inline expanded player: presented as a full-window overlay
+            // (no native sheet — a window with an attached sheet can't go
+            // fullscreen, so fullscreen is just the window's native toggle).
+            if isInlinePlayerOverlayActive(appEnvironment: appEnvironment) {
+                ZStack {
+                    Color.black
+                    ExpandedPlayerSheet()
+                }
+                .ignoresSafeArea()
+                .transition(.opacity)
+            }
             #endif
         }
         #if os(macOS)
+        // Registers the hosting window so the inline overlay targets the real
+        // main window even when another window (e.g. Settings) has focus.
+        .background(MainContentWindowReader())
+        .animation(.easeInOut(duration: 0.2), value: isInlinePlayerOverlayActive(appEnvironment: appEnvironment))
+        .onChange(of: isInlinePlayerOverlayActive(appEnvironment: appEnvironment)) { _, active in
+            if active {
+                ExpandedPlayerWindowManager.shared.beginInlineOverlay()
+            } else {
+                ExpandedPlayerWindowManager.shared.endInlineOverlay()
+            }
+        }
         .onChange(of: appEnvironment.navigationCoordinator.playerExpandTrigger) { _, _ in
-            if appEnvironment.settingsManager.macPlayerMode.usesWindow {
+            if appEnvironment.settingsManager.macPlayerSeparateWindow {
                 presentExpandedPlayerWindow(appEnvironment: appEnvironment)
             }
         }
@@ -70,32 +93,37 @@ struct ContentView: View {
                 ExpandedPlayerWindowManager.shared.hide()
             }
         }
-        .onChange(of: appEnvironment.settingsManager.macPlayerMode) { oldMode, newMode in
+        .onChange(of: appEnvironment.settingsManager.macPlayerSeparateWindow) { _, separateWindow in
             guard appEnvironment.navigationCoordinator.isPlayerExpanded else { return }
 
-            if oldMode.usesWindow && newMode.usesWindow {
-                ExpandedPlayerWindowManager.shared.updateWindowLevel(floating: newMode.isFloating)
-            } else if oldMode.usesWindow && !newMode.usesWindow {
+            if separateWindow {
+                // Inline overlay → separate window: the overlay unmounts via the
+                // presentation condition; present the window directly.
+                presentExpandedPlayerWindow(appEnvironment: appEnvironment)
+            } else {
+                // Separate window → inline overlay: hide the window so the overlay
+                // (isPlayerExpanded && !separateWindow) takes over.
                 ExpandedPlayerWindowManager.shared.hide(animated: false)
-            } else if !oldMode.usesWindow && newMode.usesWindow {
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(300))
-                    if appEnvironment.navigationCoordinator.isPlayerExpanded {
-                        presentExpandedPlayerWindow(appEnvironment: appEnvironment)
-                    }
-                }
             }
         }
+        .onChange(of: appEnvironment.settingsManager.macPlayerFloating) { _, floating in
+            guard appEnvironment.navigationCoordinator.isPlayerExpanded,
+                  appEnvironment.settingsManager.macPlayerSeparateWindow else { return }
+            ExpandedPlayerWindowManager.shared.updateWindowLevel(floating: floating)
+        }
         .sheet(isPresented: Binding(
-            get: {
-                appEnvironment.navigationCoordinator.isPlayerExpanded &&
-                !appEnvironment.settingsManager.macPlayerMode.usesWindow
-            },
-            set: { appEnvironment.navigationCoordinator.isPlayerExpanded = $0 }
+            get: { appEnvironment.navigationCoordinator.isMiniPlayerQueueSheetPresented },
+            set: { appEnvironment.navigationCoordinator.isMiniPlayerQueueSheetPresented = $0 }
         )) {
-            ExpandedPlayerSheet()
-                .frame(minWidth: 640, minHeight: 480)
-                .presentationSizing(.fitted)
+            QueueManagementSheet()
+        }
+        .sheet(isPresented: Binding(
+            get: { appEnvironment.navigationCoordinator.isMiniPlayerPlaylistSheetPresented },
+            set: { appEnvironment.navigationCoordinator.isMiniPlayerPlaylistSheetPresented = $0 }
+        )) {
+            if let video = appEnvironment.playerService.state.currentVideo {
+                PlaylistSelectorSheet(video: video)
+            }
         }
         #elseif os(tvOS)
         .fullScreenCover(isPresented: Binding(
@@ -111,6 +139,14 @@ struct ContentView: View {
     private func presentExpandedPlayerWindow(appEnvironment: AppEnvironment) {
         ExpandedPlayerWindowManager.shared.show(with: appEnvironment, animated: true)
     }
+
+    /// Whether the inline (non-separate-window) expanded player overlay should
+    /// be presented. Shared by the overlay mount and the begin/end onChange so
+    /// the two can't drift apart.
+    private func isInlinePlayerOverlayActive(appEnvironment: AppEnvironment) -> Bool {
+        appEnvironment.navigationCoordinator.isPlayerExpanded &&
+            !appEnvironment.settingsManager.macPlayerSeparateWindow
+    }
     #endif
 
     #if os(macOS)
@@ -119,14 +155,17 @@ struct ContentView: View {
         let playerState = appEnvironment.playerService.state
         let hasActiveVideo = playerState.currentVideo != nil
         let isExpanded = appEnvironment.navigationCoordinator.isPlayerExpanded
+        // The expanded player is a separate window in window mode, so keep the capsule
+        // visible alongside it. The inline overlay covers the window, so hide it there.
+        let usesWindow = appEnvironment.settingsManager.macPlayerSeparateWindow
 
-        if hasActiveVideo && !isExpanded {
+        if hasActiveVideo && (!isExpanded || usesWindow) {
             VStack(spacing: 0) {
                 Spacer()
                 MiniPlayerView()
             }
-            // Add padding for tab bar
-            .padding(.bottom, 49)
+            // Float the capsule above the bottom edge (macOS uses a sidebar, not a tab bar)
+            .padding(.bottom, 16)
             // Use move-only transition (no opacity) to prevent thumbnail flash during collapse
             .transition(.move(edge: .bottom))
             .animation(.spring(response: 0.3), value: hasActiveVideo)

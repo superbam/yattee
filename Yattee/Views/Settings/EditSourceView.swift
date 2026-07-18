@@ -59,15 +59,6 @@ private struct EditRemoteServerContent: View {
     @State private var isLoadingServerInfo = false
     @State private var serverInfoError: String?
 
-    // Connection testing
-    @State private var isTesting = false
-    @State private var testResult: RemoteServerTestResult?
-
-    enum RemoteServerTestResult {
-        case success
-        case failure(String)
-    }
-
     init(instance: Instance) {
         self.instance = instance
         _name = State(initialValue: instance.name ?? "")
@@ -309,30 +300,6 @@ private struct EditRemoteServerContent: View {
                 }
             }
 
-            Section {
-                Button {
-                    testConnection()
-                } label: {
-                    if isTesting {
-                        HStack {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text(String(localized: "sources.testing"))
-                        }
-                    } else {
-                        Label(String(localized: "sources.testConnection"), systemImage: "network")
-                    }
-                }
-                .disabled(isTesting)
-                #if os(tvOS)
-                .buttonStyle(TVSettingsButtonStyle())
-                #endif
-            }
-
-            if let result = testResult {
-                testResultSection(result)
-            }
-
             #if os(tvOS)
             Section {
                 Button {
@@ -361,6 +328,7 @@ private struct EditRemoteServerContent: View {
         #if os(macOS)
         .formStyle(.grouped)
         #endif
+        .opaqueSettingsFormBackground()
         .confirmationDialog(
             String(localized: "sources.delete.confirmation.single \(instance.displayName)"),
             isPresented: $showingDeleteConfirmation,
@@ -503,41 +471,6 @@ private struct EditRemoteServerContent: View {
         appEnvironment?.instancesManager.update(updated)
         dismiss()
     }
-
-    private func testConnection() {
-        guard let appEnvironment else { return }
-        isTesting = true
-        testResult = nil
-
-        Task {
-            do {
-                _ = try await appEnvironment.contentService.popular(for: instance)
-                await MainActor.run {
-                    isTesting = false
-                    testResult = .success
-                }
-            } catch {
-                await MainActor.run {
-                    isTesting = false
-                    testResult = .failure(error.localizedDescription)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func testResultSection(_ result: RemoteServerTestResult) -> some View {
-        Section {
-            switch result {
-            case .success:
-                Label(String(localized: "sources.test.success"), systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            case .failure(let error):
-                Label(error, systemImage: "xmark.circle.fill")
-                    .foregroundStyle(.red)
-            }
-        }
-    }
 }
 
 // MARK: - File Source Content
@@ -554,17 +487,8 @@ private struct EditFileSourceContent: View {
     @State private var password: String
     @State private var allowInvalidCertificates: Bool
     @State private var smbProtocolVersion: SMBProtocol = .auto
-    @State private var isTesting = false
-    @State private var testResult: TestResult?
-    @State private var testProgress: String?
     @State private var hasExistingPassword = false
     @State private var showingDeleteConfirmation = false
-
-    enum TestResult {
-        case success
-        case successWithBandwidth(BandwidthTestResult)
-        case failure(String)
-    }
 
     init(source: MediaSource) {
         self.source = source
@@ -608,6 +532,9 @@ private struct EditFileSourceContent: View {
                     smbProtocolVersion = source.smbProtocolVersion ?? .auto
                 }
         }
+        #if os(macOS)
+        .frame(minWidth: 500, minHeight: 450)
+        #endif
         #endif
     }
 
@@ -738,30 +665,6 @@ private struct EditFileSourceContent: View {
                 } footer: {
                     Text(String(localized: "sources.footer.allowInvalidCertificates"))
                 }
-
-                Section {
-                    Button {
-                        testConnection()
-                    } label: {
-                        if isTesting {
-                            HStack {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text(testProgress ?? String(localized: "sources.testing"))
-                            }
-                        } else {
-                            Label(String(localized: "sources.testConnection"), systemImage: "speedometer")
-                        }
-                    }
-                    .disabled(isTesting)
-                    #if os(tvOS)
-                    .buttonStyle(TVSettingsButtonStyle())
-                    #endif
-                }
-
-                if let result = testResult {
-                    testResultSection(result)
-                }
             }
 
             #if os(tvOS)
@@ -794,6 +697,7 @@ private struct EditFileSourceContent: View {
         #if os(macOS)
         .formStyle(.grouped)
         #endif
+        .opaqueSettingsFormBackground()
         .confirmationDialog(
             String(localized: "sources.delete.confirmation.single \(source.name)"),
             isPresented: $showingDeleteConfirmation,
@@ -805,90 +709,6 @@ private struct EditFileSourceContent: View {
             Button(String(localized: "common.cancel"), role: .cancel) {}
         }
         .presentationCompactAdaptation(.sheet)
-    }
-
-    @ViewBuilder
-    private func testResultSection(_ result: TestResult) -> some View {
-        Section {
-            switch result {
-            case .success:
-                Label(String(localized: "sources.status.connected"), systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            case .successWithBandwidth(let bandwidth):
-                VStack(alignment: .leading, spacing: 4) {
-                    Label(String(localized: "sources.status.connected"), systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                    if bandwidth.hasWriteAccess {
-                        if let upload = bandwidth.formattedUploadSpeed {
-                            Label(String(localized: "sources.bandwidth.upload \(upload)"), systemImage: "arrow.up.circle")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if let download = bandwidth.formattedDownloadSpeed {
-                        Label(String(localized: "sources.bandwidth.download \(download)"), systemImage: "arrow.down.circle")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    if !bandwidth.hasWriteAccess {
-                        Label(String(localized: "sources.status.readOnly"), systemImage: "lock.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.orange)
-                    }
-                    if let warning = bandwidth.warning {
-                        Text(warning)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            case .failure(let error):
-                Label(error, systemImage: "xmark.circle.fill")
-                    .foregroundStyle(.red)
-            }
-        }
-    }
-
-    private func testConnection() {
-        guard let appEnvironment else { return }
-
-        isTesting = true
-        testResult = nil
-        testProgress = nil
-
-        let testPassword = password.isEmpty
-            ? appEnvironment.mediaSourcesManager.password(for: source)
-            : password
-
-        var updatedSource = source
-        updatedSource.username = username.isEmpty ? nil : username
-        updatedSource.allowInvalidCertificates = allowInvalidCertificates
-
-        // Use factory to create client with appropriate SSL settings
-        let webDAVClient = appEnvironment.webDAVClientFactory.createClient(for: updatedSource)
-
-        Task {
-            do {
-                let bandwidthResult = try await webDAVClient.testBandwidth(
-                    source: updatedSource,
-                    password: testPassword
-                ) { status in
-                    Task { @MainActor in
-                        self.testProgress = status
-                    }
-                }
-                await MainActor.run {
-                    isTesting = false
-                    testProgress = nil
-                    testResult = .successWithBandwidth(bandwidthResult)
-                }
-            } catch {
-                await MainActor.run {
-                    isTesting = false
-                    testProgress = nil
-                    testResult = .failure(error.localizedDescription)
-                }
-            }
-        }
     }
 
     private func saveChanges() {

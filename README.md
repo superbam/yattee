@@ -1,14 +1,14 @@
 <div align="center">
-  <img src="Assets/yattee-logo.png" width="150" height="150" alt="Yattee logo">
+  <img src="assets/yattee-logo.png" width="128" height="128" alt="Yattee logo" />
   <h1>Yattee</h1>
-  <p>Privacy-focused video player for iPhone, iPad, Mac, and Apple TV</p>
+  <p>Privacy oriented video player for iOS, tvOS and macOS<br /></p>
 
 [![AGPL v3](https://shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0.en.html)
 [![GitHub issues](https://img.shields.io/github/issues/yattee/yattee)](https://github.com/yattee/yattee/issues)
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/yattee/yattee)](https://github.com/yattee/yattee/pulls)
 
-[![Discord](https://invidget.switchblade.xyz/pSnNKhZHEG)](https://yattee.stream/discord)
 
+[![Discord](https://invidget.switchblade.xyz/pSnNKhZHEG)](https://yattee.stream/discord)
 </div>
 
 > **This is a community fork** of [yattee/yattee](https://github.com/yattee/yattee) that adds two-way Invidious account sync (watch history + resume position), server-driven Shorts filtering, and offline SponsorBlock. See [What this fork changes](#what-this-fork-changes).
@@ -132,5 +132,4 @@ Help make Yattee accessible to everyone by contributing translations.
 Localization hosting provided by [Weblate](https://weblate.org/en/).
 
 ## License
-
-Yattee is shared under the [AGPL v3](https://www.gnu.org/licenses/agpl-3.0.en.html) license.
+Yattee and its components is shared on [AGPL v3](https://www.gnu.org/licenses/agpl-3.0.en.html) license.

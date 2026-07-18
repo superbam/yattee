@@ -35,6 +35,11 @@ struct SearchView: View {
     @State private var showViewOptions = false
     @State private var isSearchHistoryExpanded = false
 
+    /// Suppresses the next onChange suggestion-fetch when the search text is set
+    /// programmatically (recent search / suggestion tap / deep link), so it goes
+    /// straight to results instead of re-showing suggestions.
+    @State private var suppressNextTextChangeSearch = false
+
     @AppStorage("searchFilters") private var savedFiltersData: Data?
 
     // Persisted search instance selection
@@ -95,37 +100,36 @@ struct SearchView: View {
         self.initialQuery = initialQuery
     }
 
+    /// View options button lives on the leading edge on macOS, trailing elsewhere.
+    private var viewOptionsPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .navigation
+        #else
+        .primaryAction
+        #endif
+    }
+
     var body: some View {
         tvOSOrDefaultContent
+        #if !os(macOS)
         .sheet(isPresented: $showFilterSheet) {
-            SearchFiltersSheet(onApply: {
-                if hasResults {
-                    Task { await searchViewModel?.search(query: searchTextBinding.wrappedValue) }
-                }
-            }, filters: Binding(
-                get: { searchViewModel?.filters ?? .defaults },
-                set: { newFilters in
-                    searchViewModel?.filters = newFilters
-                    saveFilters(newFilters)
-                }
-            ))
+            searchFiltersSheetContent
             #if !os(tvOS)
             .presentationDetents([.medium, .large])
             #endif
         }
         .sheet(isPresented: $showViewOptions) {
-            ViewOptionsSheet(
-                layout: $layout,
-                rowStyle: $rowStyle,
-                gridColumns: $gridColumns,
-                hideWatched: $hideWatched,
-                maxGridColumns: gridConfig.maxColumns
-            )
+            viewOptionsSheetContent
             #if !os(tvOS)
             .liquidGlassSheetContent(sourceID: "searchViewOptions", in: sheetTransition)
             #endif
         }
+        #endif
         .onChange(of: searchTextBinding.wrappedValue) { _, newValue in
+            if suppressNextTextChangeSearch {
+                suppressNextTextChangeSearch = false
+                return
+            }
             if newValue.isEmpty {
                 searchViewModel?.clearResults()  // Clear everything when empty
                 searchViewModel?.filters = .defaults
@@ -142,6 +146,7 @@ struct SearchView: View {
         .task(id: initialQuery) {
             // Auto-execute search when opened with an initial query
             if let query = initialQuery, !query.isEmpty, searchTextBinding.wrappedValue.isEmpty {
+                suppressNextTextChangeSearch = true
                 searchTextBinding.wrappedValue = query
                 searchViewModel?.cancelSuggestions()
                 searchViewModel?.filters.type = .video
@@ -182,6 +187,43 @@ struct SearchView: View {
             loadRecentPlaylists()
         }
     }
+
+    private var searchFiltersSheetContent: some View {
+        SearchFiltersSheet(onApply: {
+            if hasResults {
+                Task { await searchViewModel?.search(query: searchTextBinding.wrappedValue) }
+            }
+        }, filters: Binding(
+            get: { searchViewModel?.filters ?? .defaults },
+            set: { newFilters in
+                searchViewModel?.filters = newFilters
+                saveFilters(newFilters)
+            }
+        ))
+    }
+
+    private var viewOptionsSheetContent: some View {
+        ViewOptionsSheet(
+            layout: $layout,
+            rowStyle: $rowStyle,
+            gridColumns: $gridColumns,
+            hideWatched: $hideWatched,
+            maxGridColumns: gridConfig.maxColumns
+        )
+    }
+
+    #if os(macOS)
+    private var searchFiltersToolbarButton: some View {
+        Button {
+            showFilterSheet = true
+        } label: {
+            Label(String(localized: "search.filters"), systemImage: filtersIconName)
+        }
+        .popover(isPresented: $showFilterSheet, arrowEdge: .bottom) {
+            searchFiltersSheetContent
+        }
+    }
+    #endif
 
     @ViewBuilder
     private var tvOSOrDefaultContent: some View {
@@ -234,19 +276,62 @@ struct SearchView: View {
         .navigationTitle(String(localized: "tabs.search"))
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            // View options first so it is the leftmost navigation item on macOS.
+            ToolbarItem(placement: viewOptionsPlacement) {
                 Button {
                     showViewOptions = true
                 } label: {
                     Label(String(localized: "viewOptions.title"), systemImage: "slider.horizontal.3")
                 }
                 .liquidGlassTransitionSource(id: "searchViewOptions", in: sheetTransition)
+                #if os(macOS)
+                .popover(isPresented: $showViewOptions, arrowEdge: .bottom) {
+                    viewOptionsSheetContent
+                }
+                #endif
             }
+            #if os(macOS)
+            if searchInstance?.supportsSearchFilters == true {
+                // Filters button + content type picker are always visible on macOS.
+                // The picker is rendered bare (no opacity/disabled/fixedSize wrappers):
+                // wrapping a `.segmented` Picker in those modifiers inserts a hosting
+                // layer that makes the toolbar fall back to a Liquid-Glass pill instead
+                // of the native segmented control.
+                ToolbarItem(placement: .navigation) {
+                    searchFiltersToolbarButton
+                }
+                ToolbarItem(placement: .principal) {
+                    if #available(macOS 26, *) {
+                        contentTypePicker
+                    } else {
+                        contentTypePicker
+                            .fixedSize()
+                    }
+                }
+            }
+            #endif
+            #if os(macOS)
+            // Pin the trailing group (search field) to the right edge
+            // so it doesn't shift when the filter items appear/disappear.
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.flexible, placement: .primaryAction)
+            }
+            #endif
         }
         .searchable(text: searchTextBinding, prompt: Text(String(localized: "search.placeholder")))
         .onSubmit(of: .search) {
             searchViewModel?.cancelSuggestions()
+            #if !os(macOS)
+            // On macOS the content type picker is always visible, so preserve the
+            // user's chosen type instead of resetting it to .video on each submit.
             searchViewModel?.filters.type = .video
+            #endif
+            if let filters = searchViewModel?.filters {
+                saveFilters(filters)
+            }
+            Task { await searchViewModel?.search(query: searchTextBinding.wrappedValue) }
+        }
+        .onChange(of: searchViewModel?.filters.type) { _, _ in
             if let filters = searchViewModel?.filters {
                 saveFilters(filters)
             }
@@ -425,6 +510,27 @@ struct SearchView: View {
     }
 
     #if !os(tvOS)
+    private var filtersIconName: String {
+        (searchViewModel?.filters.isDefault ?? true)
+            ? "line.3.horizontal.decrease.circle"
+            : "line.3.horizontal.decrease.circle.fill"
+    }
+
+    // Content type segmented picker
+    private var contentTypePicker: some View {
+        Picker("", selection: Binding(
+            get: { searchViewModel?.filters.type ?? .video },
+            set: { searchViewModel?.filters.type = $0 }
+        )) {
+            ForEach(SearchContentType.allCases) { type in
+                Text(type.title).tag(type)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+    #endif
+
+    #if os(iOS)
     private var searchFiltersStrip: some View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
@@ -432,36 +538,17 @@ struct SearchView: View {
                 Button {
                     showFilterSheet = true
                 } label: {
-                    Image(systemName: (searchViewModel?.filters.isDefault ?? true)
-                        ? "line.3.horizontal.decrease.circle"
-                        : "line.3.horizontal.decrease.circle.fill")
+                    Image(systemName: filtersIconName)
                         .font(.title2)
                 }
 
-                // Content type segmented picker
-                Picker("", selection: Binding(
-                    get: { searchViewModel?.filters.type ?? .video },
-                    set: { searchViewModel?.filters.type = $0 }
-                )) {
-                    ForEach(SearchContentType.allCases) { type in
-                        Text(type.title).tag(type)
-                    }
-                }
-                .pickerStyle(.segmented)
+                contentTypePicker
             }
 
             videoKindPicker
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .onChange(of: searchViewModel?.filters.type) { _, _ in
-            if let filters = searchViewModel?.filters {
-                saveFilters(filters)
-            }
-            Task {
-                await searchViewModel?.search(query: searchTextBinding.wrappedValue)
-            }
-        }
     }
 
     /// Segmented Videos/Shorts/All selector for video results. Shown only when
@@ -820,14 +907,13 @@ struct SearchView: View {
                             showingClearAllRecentsConfirmation = true
                         } label: {
                             HStack(spacing: 6) {
-                                Spacer()
                                 Image(systemName: "trash")
                                 Text(String(localized: "search.clearAllRecents"))
                                     .fontWeight(.semibold)
-                                Spacer()
                             }
                         }
                         .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
                         .padding(.top, 16)
                         .padding(.bottom, 32)
                     }
@@ -860,6 +946,7 @@ struct SearchView: View {
                 ForEach(vm.suggestions, id: \.self) { suggestion in
                     Button {
                         dismissKeyboard()
+                        suppressNextTextChangeSearch = (suggestion != searchTextBinding.wrappedValue)
                         searchTextBinding.wrappedValue = suggestion
                         vm.cancelSuggestions()
                         vm.filters.type = .video
@@ -1005,9 +1092,11 @@ struct SearchView: View {
                 .overlay(
                     ScrollView {
                         VStack(spacing: 16) {
+                            #if os(iOS)
                             if searchInstance?.supportsSearchFilters == true {
                                 searchFiltersStrip
                             }
+                            #endif
 
                             ProgressView()
                                 .accessibilityIdentifier("search.loading")
@@ -1088,7 +1177,7 @@ struct SearchView: View {
         if let vm = searchViewModel {
             VStack(spacing: 0) {
                 // Filter strip at top (only for instances that support search filters)
-                #if !os(tvOS)
+                #if os(iOS)
                 if searchInstance?.supportsSearchFilters == true {
                     searchFiltersStrip
                 }
@@ -1116,7 +1205,7 @@ struct SearchView: View {
         if let vm = searchViewModel {
             VStack(spacing: 0) {
                 // Filter strip at top (only for instances that support search filters)
-                #if !os(tvOS)
+                #if os(iOS)
                 if searchInstance?.supportsSearchFilters == true {
                     searchFiltersStrip
                 }
@@ -1206,7 +1295,7 @@ struct SearchView: View {
         if let vm = searchViewModel {
             LazyVStack(spacing: 16) {
                 // Filter strip at top (only for instances that support search filters)
-                #if !os(tvOS)
+                #if os(iOS)
                 if searchInstance?.supportsSearchFilters == true {
                     searchFiltersStrip
                         .padding(.bottom, 8)
@@ -1322,6 +1411,7 @@ struct SearchView: View {
 
     private func executeSearch(_ query: String) {
         dismissKeyboard()
+        suppressNextTextChangeSearch = (query != searchTextBinding.wrappedValue)
         searchTextBinding.wrappedValue = query
         searchViewModel?.cancelSuggestions()
         searchViewModel?.filters.type = .video
@@ -1469,45 +1559,15 @@ struct SearchFiltersSheet: View {
     @Binding var filters: SearchFilters
 
     var body: some View {
+        #if os(macOS)
+        // Popover content: filters apply live, click-outside dismisses.
+        filtersForm
+            .onChange(of: filters) { _, _ in onApply() }
+            .padding()
+            .frame(width: 300)
+        #else
         NavigationStack {
-            Form {
-                // Sort, Upload Date, Duration in one section
-                Section {
-                    Picker(String(localized: "search.sort"), selection: $filters.sort) {
-                        ForEach(SearchSortOption.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-
-                    Picker(String(localized: "search.uploadDate"), selection: $filters.date) {
-                        ForEach(SearchDateFilter.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-
-                    Picker(String(localized: "search.duration"), selection: $filters.duration) {
-                        ForEach(SearchDurationFilter.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-                }
-
-                // Reset Button
-                Section {
-                    Button(role: .destructive) {
-                        let currentType = filters.type
-                        filters = .defaults
-                        filters.type = currentType
-                    } label: {
-                        HStack {
-                            Spacer()
-                            Text(String(localized: "search.filters.reset"))
-                            Spacer()
-                        }
-                    }
-                    .disabled(filters.isDefault)
-                }
-            }
+            filtersForm
             .navigationTitle(String(localized: "search.filters"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -1526,9 +1586,48 @@ struct SearchFiltersSheet: View {
                 }
             }
         }
-        #if os(macOS)
-        .frame(minWidth: 500, minHeight: 400)
         #endif
+    }
+
+    private var filtersForm: some View {
+        Form {
+            // Sort, Upload Date, Duration in one section
+            Section {
+                Picker(String(localized: "search.sort"), selection: $filters.sort) {
+                    ForEach(SearchSortOption.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+
+                Picker(String(localized: "search.uploadDate"), selection: $filters.date) {
+                    ForEach(SearchDateFilter.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+
+                Picker(String(localized: "search.duration"), selection: $filters.duration) {
+                    ForEach(SearchDurationFilter.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+            }
+
+            // Reset Button
+            Section {
+                Button(role: .destructive) {
+                    let currentType = filters.type
+                    filters = .defaults
+                    filters.type = currentType
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text(String(localized: "search.filters.reset"))
+                        Spacer()
+                    }
+                }
+                .disabled(filters.isDefault)
+            }
+        }
     }
 }
 

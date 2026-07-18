@@ -134,7 +134,7 @@ struct VideoInfoView: View {
     }
 
     private var accentColor: Color {
-        appEnvironment?.settingsManager.accentColor.color ?? .accentColor
+        appEnvironment?.settingsManager.resolvedAccentColor ?? .accentColor
     }
 
     private var dataManager: DataManager? { appEnvironment?.dataManager }
@@ -259,6 +259,9 @@ struct VideoInfoView: View {
                 videoContent
             }
         }
+        // Opaque background so the header gradient (which fades to windowBackgroundColor)
+        // blends seamlessly even when presented outside a navigation stack.
+        .opaqueWindowBackground()
         .task {
             await loadInitialVideoIfNeeded()
         }
@@ -542,6 +545,7 @@ struct VideoInfoView: View {
                 #if !os(tvOS)
                 .scrollDismissesKeyboard(.interactively)
                 #endif
+                .softTopScrollEdgeEffect()
                 .modifier(VideoInfoScrollOffsetModifier(scrollOffset: $scrollOffset))
 
                 #if os(macOS)
@@ -1973,17 +1977,13 @@ struct VideoInfoView: View {
                 #endif
                 #if !os(tvOS)
                 .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(role: .cancel) {
-                            showingCommentsSheet = false
-                        } label: {
-                            Label(String(localized: "common.close"), systemImage: "xmark")
-                                .labelStyle(.iconOnly)
-                        }
-                    }
+                    sheetCloseToolbarItem { showingCommentsSheet = false }
                 }
                 #endif
             }
+            #if os(macOS)
+            .frame(minWidth: 500, minHeight: 550)
+            #endif
         }
     }
 

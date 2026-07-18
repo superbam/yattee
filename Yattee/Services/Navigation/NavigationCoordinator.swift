@@ -115,6 +115,12 @@ final class NavigationCoordinator {
     /// Whether the player is currently expanding (for animation coordination with mini player).
     var isPlayerExpanding = false
 
+    /// macOS only: true while the main window is native-fullscreen for the
+    /// inline player overlay. Mirrors the window's fullscreen state (kept in
+    /// sync by ExpandedPlayerWindowManager via NSWindow fullscreen
+    /// notifications) so player controls update reactively.
+    var isMacInlinePlayerFullScreen = false
+
     /// Whether the player is currently collapsing (for animation coordination with mini player).
     var isPlayerCollapsing = false
 

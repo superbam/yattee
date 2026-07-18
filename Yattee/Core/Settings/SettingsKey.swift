@@ -13,6 +13,10 @@ enum SettingsKey: String, CaseIterable {
     // General
     case theme
     case accentColor
+    case customAccentColor
+    case accentColorDark
+    case customAccentColorDark
+    case useSeparateDarkAccentColor
     case showWatchedCheckmark
 
     // Playback
@@ -20,12 +24,12 @@ enum SettingsKey: String, CaseIterable {
     case cellularQuality
     case autoplay
     case backgroundPlayback
-    case dashEnabled
     case preferredAudioLanguage
     case preferredSubtitlesLanguage
     case resumeAction
     case tvOSMenuButtonClosesVideo
     case allowSoftwareDecodedFormats
+    case audioOnlyMode
 
     // SponsorBlock
     case sponsorBlockEnabled
@@ -46,7 +50,10 @@ enum SettingsKey: String, CaseIterable {
     case resolveShortLinksEnabled
 
     // Platform-specific
-    case macPlayerMode
+    case macPlayerSeparateWindow
+    case macPlayerFloating
+    case macControlsBarOffsetX // Normalized X offset of macOS control bar from default position
+    case macControlsBarOffsetY // Normalized Y offset of macOS control bar from default position
     case playerSheetAutoResize
     case listStyle
 
@@ -65,6 +72,10 @@ enum SettingsKey: String, CaseIterable {
     case homeShortcutOrder
     case homeShortcutVisibility
     case homeShortcutLayout
+    case homeShortcutCardStyle
+    case homeShortcutCardColor
+    case homeShortcutColorfulPalette
+    case homeShortcutCustomPaletteColors
     case homeSectionOrder
     case homeSectionVisibility
     case homeSectionItemsLimit
@@ -116,6 +127,8 @@ enum SettingsKey: String, CaseIterable {
     case zoomTransitionsEnabled
     case tvMatchDisplayFrameRate
     case tvMatchDisplayDynamicRange
+    case tvAudioDelayMs
+    case tvVideoSyncMode
 
     // Details panel
     case floatingDetailsPanelSide // Landscape only - which side the panel appears on
@@ -147,9 +160,12 @@ enum SettingsKey: String, CaseIterable {
     /// in both UserDefaults and iCloud, so each platform family syncs independently.
     var isPlatformSpecific: Bool {
         switch self {
-        case .preferredQuality, .cellularQuality, .allowSoftwareDecodedFormats, .macPlayerMode, .listStyle,
+        case .preferredQuality, .cellularQuality, .allowSoftwareDecodedFormats, .audioOnlyMode,
+             .macPlayerSeparateWindow, .macPlayerFloating, .listStyle,
+             .macControlsBarOffsetX, .macControlsBarOffsetY,
              // Home layout — different UI paradigms per platform
-             .homeShortcutOrder, .homeShortcutVisibility, .homeShortcutLayout,
+             .homeShortcutOrder, .homeShortcutVisibility, .homeShortcutLayout, .homeShortcutCardStyle,
+             .homeShortcutCardColor, .homeShortcutColorfulPalette, .homeShortcutCustomPaletteColors,
              .homeSectionOrder, .homeSectionVisibility, .homeSectionItemsLimit, .homeSectionLayout,
              // Top Shelf — tvOS only
              .topShelfSections,

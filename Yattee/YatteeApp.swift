@@ -27,7 +27,7 @@ struct YatteeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     #endif
 
-    @State private var appEnvironment = AppEnvironment()
+    @State private var appEnvironment = AppEnvironment.shared
     @State private var backgroundTasksRegistered = false
     @State private var showingClipboardAlert = false
     @State private var detectedClipboardURL: URL?
@@ -46,6 +46,8 @@ struct YatteeApp: App {
     // First-launch state
     @State private var showingICloudAlert = false
     @State private var showingICloudProgress = false
+    @State private var showingLegacyAccountsAlert = false
+    @State private var showingLegacyAccountsImport = false
     #if os(iOS)
     @State private var showingSettings = false
     #endif
@@ -68,8 +70,7 @@ struct YatteeApp: App {
             ContentView()
                 .appEnvironment(appEnvironment)
                 #if !os(tvOS)
-                .preferredColorScheme(appEnvironment.settingsManager.theme.colorScheme)
-                .tint(appEnvironment.settingsManager.accentColor.color)
+                .tint(appEnvironment.settingsManager.resolvedAccentColor)
                 #endif
                 #if os(macOS)
                 .frame(minWidth: 800, minHeight: 500)
@@ -83,6 +84,9 @@ struct YatteeApp: App {
                     handleContinuedActivity(activity)
                 }
                 .onAppear {
+                    #if !os(tvOS)
+                    SettingsManager.applyTheme(appEnvironment.settingsManager.theme)
+                    #endif
                     registerBackgroundTasksIfNeeded()
 
                     // FORK (sources-status): backfill fork detection on cold launch
@@ -178,10 +182,21 @@ struct YatteeApp: App {
                         enableICloudAndWait()
                     }
                     Button(String(localized: "common.cancel"), role: .cancel) {
-                        appEnvironment.settingsManager.onboardingCompleted = true
+                        finishFirstLaunchFlow()
                     }
                 } message: {
                     Text(String(localized: "settings.icloud.enable.confirmation.message"))
+                }
+                .alert(
+                    String(localized: "migration.accounts.prompt.title"),
+                    isPresented: $showingLegacyAccountsAlert
+                ) {
+                    Button(String(localized: "migration.accounts.prompt.review")) {
+                        showingLegacyAccountsImport = true
+                    }
+                    Button(String(localized: "migration.accounts.prompt.later"), role: .cancel) {}
+                } message: {
+                    Text(String(localized: "migration.accounts.prompt.message"))
                 }
                 #if os(macOS)
                 .sheet(isPresented: $showingICloudProgress) {
@@ -195,6 +210,15 @@ struct YatteeApp: App {
                         .appEnvironment(appEnvironment)
                 }
                 #endif
+                .sheet(isPresented: $showingLegacyAccountsImport) {
+                    NavigationStack {
+                        LegacyAccountsImportView()
+                            .appEnvironment(appEnvironment)
+                    }
+                    #if os(macOS)
+                    .frame(minWidth: 560, minHeight: 560)
+                    #endif
+                }
                 #if os(iOS)
                 .sheet(isPresented: $showingSettings) {
                     SettingsView()
@@ -293,6 +317,8 @@ struct YatteeApp: App {
                 appEnvironment.cloudKitSync.stopForegroundPolling()
                 appEnvironment.invidiousHistorySync.stopPeriodicSync()
                 SubscriptionFeedCache.shared.stopPeriodicWarm()
+                // Queue current watch progress so the position reaches other devices
+                appEnvironment.playerService.syncWatchProgress()
                 Task {
                     await appEnvironment.cloudKitSync.flushPendingChanges()
                 }
@@ -350,16 +376,42 @@ struct YatteeApp: App {
                 appEnvironment.cloudKitSync.stopForegroundPolling()
                 appEnvironment.invidiousHistorySync.stopPeriodicSync()
                 SubscriptionFeedCache.shared.stopPeriodicWarm()
-                Task {
-                    await appEnvironment.cloudKitSync.flushPendingChanges()
-                }
+                // Queue current watch progress so the position reaches other devices
+                appEnvironment.playerService.syncWatchProgress()
 
                 #if os(iOS)
+                // Persist pending SwiftData changes and run the CloudKit flush
+                // inside a background-task assertion. iOS terminates apps with
+                // 0xdead10cc when they hold the SwiftData/SQLite database lock
+                // across suspension; committing now releases the lock, and the
+                // assertion keeps the app alive until the async flush finishes.
+                var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+                backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "PersistOnBackground") {
+                    if backgroundTask != .invalid {
+                        UIApplication.shared.endBackgroundTask(backgroundTask)
+                        backgroundTask = .invalid
+                    }
+                }
+                // Commit any pending changes synchronously so no open SQLite
+                // transaction is left behind at suspension.
+                appEnvironment.dataManager.save()
+                Task {
+                    await appEnvironment.cloudKitSync.flushPendingChanges()
+                    if backgroundTask != .invalid {
+                        UIApplication.shared.endBackgroundTask(backgroundTask)
+                        backgroundTask = .invalid
+                    }
+                }
+
                 // FORK (playback-sync): also schedule when Invidious history
                 // sync is on, so playback sync runs in the background even if
                 // video notifications are disabled.
                 if appEnvironment.settingsManager.backgroundRefreshShouldBeScheduled {
                     appEnvironment.backgroundRefreshManager.scheduleIOSBackgroundRefresh()
+                }
+                #else
+                Task {
+                    await appEnvironment.cloudKitSync.flushPendingChanges()
                 }
                 #endif
             }
@@ -401,10 +453,9 @@ struct YatteeApp: App {
         // Auto-delete old history entries based on retention setting
         performHistoryCleanup()
 
-        // Run first-launch tasks: silently import v1 data, then offer iCloud sync.
+        // Run first-launch tasks: offer iCloud sync, then optionally ask about legacy accounts.
         if !appEnvironment.settingsManager.onboardingCompleted {
             Task {
-                await appEnvironment.legacyMigrationService.autoImportIfNeeded()
                 await appEnvironment.cloudKitSync.refreshAccountStatus()
 
                 if appEnvironment.cloudKitSync.accountStatus == .available {
@@ -412,9 +463,11 @@ struct YatteeApp: App {
                     try? await Task.sleep(nanoseconds: 500_000_000)
                     showingICloudAlert = true
                 } else {
-                    appEnvironment.settingsManager.onboardingCompleted = true
+                    finishFirstLaunchFlow()
                 }
             }
+        } else {
+            presentLegacyAccountsPromptIfNeeded()
         }
     }
 
@@ -436,8 +489,24 @@ struct YatteeApp: App {
             appEnvironment.instancesManager.replaceWithiCloudData()
             appEnvironment.mediaSourcesManager.replaceWithiCloudData()
 
-            settings.onboardingCompleted = true
             showingICloudProgress = false
+            finishFirstLaunchFlow()
+        }
+    }
+
+    /// Completes first-launch bookkeeping and then shows the one-time legacy account prompt if needed.
+    private func finishFirstLaunchFlow() {
+        appEnvironment.settingsManager.onboardingCompleted = true
+        presentLegacyAccountsPromptIfNeeded()
+    }
+
+    /// Shows a one-time prompt for unresolved v1 accounts.
+    private func presentLegacyAccountsPromptIfNeeded() {
+        guard appEnvironment.legacyMigrationService.shouldShowLegacyAccountsPrompt else { return }
+
+        appEnvironment.legacyMigrationService.markLegacyAccountsPromptShown()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            showingLegacyAccountsAlert = true
         }
     }
 
@@ -746,7 +815,7 @@ struct YatteeApp: App {
             // Always expand player after handoff (unless PiP is active)
             // We add a small delay to ensure ContentView has set up its .onChange observers
             // (during app launch via Handoff, the trigger can fire before the view is ready)
-            #if os(iOS)
+            #if os(iOS) || os(macOS)
             let isPiPActive = appEnvironment.playerService.state.pipState == .active
             #else
             let isPiPActive = false

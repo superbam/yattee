@@ -15,6 +15,7 @@ struct SectionEditorView: View {
     // Local state for immediate UI updates
     @State private var buttons: [ControlButtonConfiguration] = []
     @State private var availableTypes: [ControlButtonType] = []
+    @State private var controlBarTheme: ControlsTheme = .system
 
     var body: some View {
         List {
@@ -30,7 +31,8 @@ struct SectionEditorView: View {
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)
 
-            // Orientation toggle
+            // Orientation toggle; macOS has no portrait/landscape distinction
+            #if os(iOS)
             Picker(
                 String(localized: "settings.playerControls.previewOrientation"),
                 selection: $viewModel.isPreviewingLandscape
@@ -42,6 +44,30 @@ struct SectionEditorView: View {
             }
             .pickerStyle(.segmented)
             .listRowBackground(Color.clear)
+            #endif
+
+            // The macOS bar draws a glass capsule whose appearance can be forced.
+            #if os(macOS)
+            if sectionType == .bottom {
+                Section {
+                    Picker(
+                        String(localized: "settings.playerControls.glassBackground", defaultValue: "Glass Background"),
+                        selection: $controlBarTheme
+                    ) {
+                        ForEach(ControlsTheme.allCases, id: \.self) { theme in
+                            Text(glassBackgroundLabel(for: theme)).tag(theme)
+                        }
+                    }
+                    .disabled(!viewModel.canEditActivePreset)
+                    .onChange(of: controlBarTheme) { _, newTheme in
+                        guard newTheme != viewModel.currentLayout.globalSettings.controlBarTheme else { return }
+                        viewModel.updateGlobalSettingsSync { $0.controlBarTheme = newTheme }
+                    }
+                } header: {
+                    Text(String(localized: "settings.playerControls.appearance"))
+                }
+            }
+            #endif
 
             // Added buttons
             Section {
@@ -55,6 +81,18 @@ struct SectionEditorView: View {
                     } label: {
                         ButtonRow(configuration: button)
                     }
+                    .contextMenu {
+                        if viewModel.canEditActivePreset {
+                            Button(role: .destructive) {
+                                removeButton(id: button.id)
+                            } label: {
+                                Label(
+                                    String(localized: "settings.playerControls.delete"),
+                                    systemImage: "trash"
+                                )
+                            }
+                        }
+                    }
                 }
                 .onMove { source, destination in
                     // Update local state immediately
@@ -67,16 +105,10 @@ struct SectionEditorView: View {
                     )
                 }
                 .onDelete { indexSet in
-                    // Get button IDs before removing from local state
                     let buttonIDs = indexSet.map { buttons[$0].id }
-                    // Update local state immediately
-                    buttons.remove(atOffsets: indexSet)
-                    // Sync to view model
                     for id in buttonIDs {
-                        viewModel.removeButtonSync(id, from: sectionType)
+                        removeButton(id: id)
                     }
-                    // Update available types
-                    syncAvailableTypes()
                 }
             } header: {
                 Text(String(localized: "settings.playerControls.addedButtons"))
@@ -114,6 +146,7 @@ struct SectionEditorView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .opaqueSettingsFormBackground()
         .toolbar {
             #if os(iOS)
             EditButton()
@@ -137,6 +170,7 @@ struct SectionEditorView: View {
         case .bottom:
             buttons = preset.layout.bottomSection.buttons
         }
+        controlBarTheme = preset.layout.globalSettings.controlBarTheme
         syncAvailableTypes()
     }
 
@@ -146,6 +180,15 @@ struct SectionEditorView: View {
             // Spacer can be added multiple times
             buttonType == .spacer || !usedTypes.contains(buttonType)
         }
+    }
+
+    private func removeButton(id: UUID) {
+        // Update local state immediately
+        buttons.removeAll { $0.id == id }
+        // Sync to view model
+        viewModel.removeButtonSync(id, from: sectionType)
+        // Update available types
+        syncAvailableTypes()
     }
 
     private func addButton(_ buttonType: ControlButtonType) {
@@ -158,12 +201,27 @@ struct SectionEditorView: View {
         viewModel.addButtonSync(buttonType, to: sectionType)
     }
 
+    #if os(macOS)
+    private func glassBackgroundLabel(for theme: ControlsTheme) -> String {
+        switch theme {
+        case .system:
+            return String(localized: "controls.theme.auto", defaultValue: "Auto")
+        case .light, .dark:
+            return theme.displayName
+        }
+    }
+    #endif
+
     private var sectionTitle: String {
         switch sectionType {
         case .top:
             return String(localized: "settings.playerControls.topButtons")
         case .bottom:
+            #if os(macOS)
+            return String(localized: "settings.playerControls.controlBar", defaultValue: "Control Bar")
+            #else
             return String(localized: "settings.playerControls.bottomButtons")
+            #endif
         }
     }
 }
@@ -182,11 +240,13 @@ private struct ButtonRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(configuration.buttonType.displayName)
 
+                #if os(iOS)
                 if configuration.visibilityMode != .both {
                     Text(configuration.visibilityMode.displayName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                #endif
             }
 
             Spacer()

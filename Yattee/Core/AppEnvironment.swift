@@ -58,6 +58,28 @@ final class AppEnvironment {
     let legacyMigrationService: LegacyDataMigrationService
     let sourcesSettings: SourcesSettings
 
+    /// Center-section settings of the active player controls preset, cached for
+    /// synchronous access. Menu bar commands read seek durations from here since
+    /// they cannot await the layout service actor.
+    private(set) var activeControlsCenterSettings: CenterSectionSettings = .default
+
+    @ObservationIgnored private var controlsSettingsObservers: [NSObjectProtocol] = []
+
+    // MARK: - Shared Instance
+
+    /// The single, process-wide app environment.
+    ///
+    /// SwiftUI may evaluate a `@State` property's default-value autoclosure more
+    /// than once (it keeps only the first result but still runs the side effects
+    /// of the discarded instances). Constructing `AppEnvironment` more than once
+    /// would create multiple `DownloadManager`s — and therefore multiple
+    /// background `URLSession`s registered under the same identifier — causing
+    /// download-completion delegate callbacks to be delivered to an instance
+    /// whose `activeDownloads` is empty (the finished file is then dropped).
+    /// Referencing this `static let` from the App's `@State` guarantees exactly
+    /// one instance for the lifetime of the process.
+    static let shared = AppEnvironment()
+
     // MARK: - Initialization
 
     init(
@@ -216,7 +238,7 @@ final class AppEnvironment {
         // Wire up SMB client to check if SMB playback is active
         // This prevents crashes from concurrent libsmbclient usage
         let smbClientRef = self.smbClient
-        Task {
+        Task { [weak player] in
             await smbClientRef.setPlaybackActiveCallback { [weak player] in
                 player?.state.isSMBPlaybackActive ?? false
             }
@@ -312,7 +334,10 @@ final class AppEnvironment {
         self.legacyMigrationService = LegacyDataMigrationService(
             instancesManager: instances,
             basicAuthCredentialsManager: basicAuthCreds,
-            httpClient: client
+            invidiousCredentialsManager: invidiousCreds,
+            pipedCredentialsManager: pipedCreds,
+            invidiousAPI: invidiousAPI,
+            pipedAPI: pipedAPI
         )
 
         // Initialize Sources Settings
@@ -326,6 +351,18 @@ final class AppEnvironment {
 
         // Wire up player controls layout service to player service (for preset-based settings)
         player.setPlayerControlsLayoutService(layoutService)
+
+        // Cache active preset's center settings and keep them in sync
+        Task { await self.refreshActiveControlsSettings() }
+        for name: Notification.Name in [.playerControlsActivePresetDidChange, .playerControlsPresetsDidChange] {
+            controlsSettingsObservers.append(
+                NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    Task { @MainActor in
+                        await self?.refreshActiveControlsSettings()
+                    }
+                }
+            )
+        }
 
         // Set up circular dependencies after all properties are initialized
         bgRefreshManager.setAppEnvironment(self)
@@ -365,6 +402,12 @@ final class AppEnvironment {
     }
 
     // MARK: - Configuration
+
+    /// Refreshes the cached center-section settings from the active player controls preset.
+    func refreshActiveControlsSettings() async {
+        let layout = await playerControlsLayoutService.activeLayout()
+        activeControlsCenterSettings = layout.centerSettings
+    }
 
     /// Updates the HTTP client's User-Agent configuration from current settings.
     /// Call this after changing User-Agent related settings.

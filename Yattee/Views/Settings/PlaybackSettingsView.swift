@@ -250,14 +250,10 @@ private struct BehaviorSection: View {
 
         SettingsFormSection("settings.playback.behavior.header", footer: footer) {
             #if os(macOS)
-            PlatformMenuPicker(
-                String(localized: "settings.playback.macOS.playerMode"),
-                selection: $settings.macPlayerMode
-            ) {
-                ForEach(MacPlayerMode.allCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
+            Toggle(
+                String(localized: "settings.playback.macOS.separateWindow"),
+                isOn: $settings.macPlayerSeparateWindow
+            )
 
             Toggle(
                 String(localized: "settings.playback.macOS.autoResizePlayer"),
@@ -274,10 +270,14 @@ private struct BehaviorSection: View {
                 }
             }
 
+            #if !os(macOS)
+            // macOS never suspends apps, so playback always continues in the
+            // background — the toggle would have no effect there
             Toggle(
                 String(localized: "settings.playback.backgroundPlayback"),
                 isOn: $settings.backgroundPlaybackEnabled
             )
+            #endif
 
             Toggle("Hide Shorts", isOn: $settings.hideShorts)
 

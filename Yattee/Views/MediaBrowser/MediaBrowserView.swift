@@ -59,6 +59,24 @@ struct MediaBrowserView: View {
         return sortedFiles(result)
     }
 
+    private var viewOptionsSheetContent: some View {
+        MediaBrowserViewOptionsSheet(
+            sourceType: source.type,
+            sortOrder: $sortOrder,
+            sortAscending: $sortAscending,
+            showOnlyPlayable: $showOnlyPlayable
+        )
+    }
+
+    /// View options button lives on the leading edge on macOS, trailing elsewhere.
+    private var viewOptionsPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .navigation
+        #else
+        .primaryAction
+        #endif
+    }
+
     var body: some View {
         content
             #if !os(tvOS)
@@ -79,7 +97,7 @@ struct MediaBrowserView: View {
                         }
                     }
                 }
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItem(placement: viewOptionsPlacement) {
                     Button {
                         showViewOptions = true
                     } label: {
@@ -91,18 +109,20 @@ struct MediaBrowserView: View {
                         )
                     }
                     .liquidGlassTransitionSource(id: "mediaBrowserViewOptions", in: sheetTransition)
+                    #if os(macOS)
+                    .popover(isPresented: $showViewOptions, arrowEdge: .bottom) {
+                        viewOptionsSheetContent
+                    }
+                    #endif
                 }
                 #endif
             }
+            #if !os(macOS)
             .sheet(isPresented: $showViewOptions) {
-                MediaBrowserViewOptionsSheet(
-                    sourceType: source.type,
-                    sortOrder: $sortOrder,
-                    sortAscending: $sortAscending,
-                    showOnlyPlayable: $showOnlyPlayable
-                )
-                .liquidGlassSheetContent(sourceID: "mediaBrowserViewOptions", in: sheetTransition)
+                viewOptionsSheetContent
+                    .liquidGlassSheetContent(sourceID: "mediaBrowserViewOptions", in: sheetTransition)
             }
+            #endif
             .task {
                 await loadFiles()
             }

@@ -143,6 +143,14 @@ struct MPVVideoView: View {
             applies: appliesAspectRatio
         ))
         .onAppear {
+            #if os(iOS) || os(macOS)
+            // Resume the MPV display link when the expanded video view appears.
+            // MiniPlayerView pauses rendering when its video preview hides during expand;
+            // PlayerService.playerSheetDidAppear skips resuming while PiP is active, so it
+            // can't be relied on to resume. On macOS this also recovers the sheet re-open
+            // black screen when the shared render view reappears without a window re-parent.
+            backend.resumeRendering()
+            #endif
             // Start debug updates if overlay is already visible when view appears
             if playerState.showDebugOverlay {
                 startDebugUpdates()
@@ -250,10 +258,8 @@ struct MPVVideoView: View {
                 playerService.loadCaption(caption)
             },
             onStreamSelected: { stream, audioStream in
-                guard let video = playerState.currentVideo else { return }
-                let currentTime = playerState.currentTime
                 Task {
-                    await playerService.play(video: video, stream: stream, audioStream: audioStream, startTime: currentTime)
+                    await playerService.selectStreamManually(stream, audioStream: audioStream)
                 }
             }
         )
@@ -288,6 +294,10 @@ struct MPVVideoView: View {
                 playerService.currentBackend?.isMuted = newMuted
                 playerState.isMuted = newMuted
                 appEnvironment?.remoteControlCoordinator.broadcastStateUpdate()
+            },
+            onRateChanged: { rate in
+                playerState.rate = rate
+                playerService.currentBackend?.rate = Float(rate.rawValue)
             }
         )
         #else

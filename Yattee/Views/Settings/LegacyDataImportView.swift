@@ -2,29 +2,32 @@
 //  LegacyDataImportView.swift
 //  Yattee
 //
-//  Full-screen view for importing legacy v1 data from Advanced Settings.
+//  View for reviewing and re-creating accounts and sources from the legacy v1 app.
 //
 
 import SwiftUI
 
-struct LegacyDataImportView: View {
+struct LegacyAccountsImportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appEnvironment) private var appEnvironment
 
-    @State private var items: [LegacyImportItem] = []
+    var showsDoneButton = true
+
+    @State private var accountItems: [LegacyAccountImportItem] = []
+    @State private var instanceItems: [LegacyInstanceImportItem] = []
+    @State private var rowStates: [String: LegacyAccountRowState] = [:]
     @State private var isLoading = true
-    @State private var isImporting = false
-    @State private var showingResultSheet = false
-    @State private var lastResult: MigrationResult?
-    @State private var showingUnreachableAlert = false
-    @State private var pendingUnreachableItem: LegacyImportItem?
+    @State private var pendingRemoval: PendingRemoval?
+    @State private var importSuccessTitle = ""
+    @State private var importedInstanceName = ""
+    @State private var showingImportSuccess = false
 
     private var legacyMigrationService: LegacyDataMigrationService? {
         appEnvironment?.legacyMigrationService
     }
 
-    private var selectedCount: Int {
-        items.filter(\.isSelected).count
+    private var isEmpty: Bool {
+        accountItems.isEmpty && instanceItems.isEmpty
     }
 
     var body: some View {
@@ -32,270 +35,379 @@ struct LegacyDataImportView: View {
             if isLoading {
                 ProgressView()
                     .controlSize(.large)
-            } else if items.isEmpty {
-                ContentUnavailableView(
-                    String(localized: "migration.noDataFound"),
-                    systemImage: "doc.questionmark",
-                    description: Text(String(localized: "migration.noDataFoundDescription"))
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if isEmpty {
+                emptyState
             } else {
-                importContent
+                contentList
             }
         }
-        .navigationTitle(String(localized: "settings.advanced.data.importLegacy"))
+        .navigationTitle(String(localized: "migration.accounts.title"))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .opaqueSettingsFormBackground()
+        .toolbar {
+            #if !os(tvOS)
+            if showsDoneButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "common.done")) {
+                        dismiss()
+                    }
+                }
+            }
+            #endif
+        }
         .task {
             loadLegacyData()
         }
-        .sheet(isPresented: $showingResultSheet) {
-            resultSheet
+        .confirmationDialog(
+            pendingRemoval?.confirmationTitle ?? "",
+            item: $pendingRemoval,
+            titleVisibility: .visible
+        ) { removal in
+            Button(String(localized: "migration.accounts.remove.confirm"), role: .destructive) {
+                confirmRemoval(removal)
+            }
+            Button(String(localized: "common.cancel"), role: .cancel) {}
+        } message: { removal in
+            Text(String(localized: "migration.accounts.remove.message \(removal.displayName)"))
         }
-        .alert(String(localized: "migration.unreachableTitle"), isPresented: $showingUnreachableAlert) {
-            Button(String(localized: "migration.unreachableImport"), role: .destructive) {
-                // Keep the item selected
-            }
-            Button(String(localized: "common.cancel"), role: .cancel) {
-                if let item = pendingUnreachableItem,
-                   let index = items.firstIndex(where: { $0.id == item.id }) {
-                    items[index].isSelected = false
-                }
-            }
+        .alert(importSuccessTitle, isPresented: $showingImportSuccess) {
+            Button(String(localized: "common.ok"), role: .cancel) {}
         } message: {
-            Text(String(localized: "migration.unreachableMessage"))
+            Text(importedInstanceName)
         }
     }
 
-    // MARK: - Import Content
-
-    @ViewBuilder
-    private var importContent: some View {
-        VStack(spacing: 0) {
-            SettingsFormContainer {
-                SettingsFormSection("migration.selectToImport") {
-                    ForEach(items) { item in
-                        MigrationImportRow(item: item) {
-                            toggleItem(item)
+    private var contentList: some View {
+        Form {
+            if !accountItems.isEmpty {
+                Section {
+                    ForEach(accountItems) { item in
+                        LegacyAccountImportRow(
+                            item: item,
+                            state: stateBinding(for: item)
+                        ) {
+                            importLegacyAccount(item)
+                        } onRemove: {
+                            pendingRemoval = .account(item)
                         }
                     }
+                } header: {
+                    Text(String(localized: "migration.accounts.section"))
                 } footer: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(localized: "migration.accountsHint"))
-                        Text(String(localized: "migration.settingsFooter"))
-                    }
+                    Text(String(localized: "migration.accounts.footer"))
                 }
             }
 
-            // Bottom bar with import button
-            VStack(spacing: 12) {
-                Divider()
+            if !instanceItems.isEmpty {
+                Section {
+                    ForEach(instanceItems) { item in
+                        LegacyInstanceImportRow(item: item) {
+                            importLegacyInstance(item)
+                        } onRemove: {
+                            pendingRemoval = .instance(item)
+                        }
+                    }
+                } header: {
+                    Text(String(localized: "migration.sources.section"))
+                } footer: {
+                    Text(String(localized: "migration.sources.footer"))
+                }
+            }
+        }
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
+    }
 
-                Button(action: performImport) {
-                    if isImporting {
-                        HStack(spacing: 8) {
+    private var emptyState: some View {
+        ContentUnavailableView(
+            String(localized: "migration.accounts.empty.title"),
+            systemImage: "person.badge.key",
+            description: Text(String(localized: "migration.accounts.empty.description"))
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func loadLegacyData() {
+        let loadedAccounts = legacyMigrationService?.parseLegacyAccountsForImport() ?? []
+        accountItems = loadedAccounts
+        instanceItems = legacyMigrationService?.parseLegacyInstancesForImport() ?? []
+        for item in loadedAccounts where rowStates[item.legacyAccountID] == nil {
+            rowStates[item.legacyAccountID] = LegacyAccountRowState(username: item.username)
+        }
+        isLoading = false
+    }
+
+    private func stateBinding(for item: LegacyAccountImportItem) -> Binding<LegacyAccountRowState> {
+        Binding {
+            rowStates[item.legacyAccountID] ?? LegacyAccountRowState(username: item.username)
+        } set: { newValue in
+            rowStates[item.legacyAccountID] = newValue
+        }
+    }
+
+    private func importLegacyAccount(_ item: LegacyAccountImportItem) {
+        guard let service = legacyMigrationService else { return }
+        var state = rowStates[item.legacyAccountID] ?? LegacyAccountRowState(username: item.username)
+        state.isImporting = true
+        state.errorMessage = nil
+        rowStates[item.legacyAccountID] = state
+
+        Task {
+            do {
+                let importedInstance = try await service.importLegacyAccount(
+                    item,
+                    username: state.username,
+                    password: state.password
+                )
+                importSuccessTitle = String(localized: "migration.accounts.imported.title")
+                importedInstanceName = importedInstance.displayName
+                showingImportSuccess = true
+                accountItems.removeAll { $0.legacyAccountID == item.legacyAccountID }
+                rowStates.removeValue(forKey: item.legacyAccountID)
+            } catch APIError.unauthorized {
+                setImportError(String(localized: "login.error.invalidCredentials"), for: item)
+            } catch {
+                setImportError(error.localizedDescription, for: item)
+            }
+        }
+    }
+
+    private func importLegacyInstance(_ item: LegacyInstanceImportItem) {
+        guard let service = legacyMigrationService else { return }
+        let importedInstance = service.importLegacyInstance(item)
+        importSuccessTitle = String(localized: "migration.sources.imported.title")
+        importedInstanceName = importedInstance.displayName
+        showingImportSuccess = true
+        instanceItems.removeAll { $0.legacyInstanceID == item.legacyInstanceID }
+    }
+
+    private func setImportError(_ message: String, for item: LegacyAccountImportItem) {
+        var state = rowStates[item.legacyAccountID] ?? LegacyAccountRowState(username: item.username)
+        state.isImporting = false
+        state.errorMessage = message
+        rowStates[item.legacyAccountID] = state
+    }
+
+    private func confirmRemoval(_ removal: PendingRemoval) {
+        switch removal {
+        case .account(let item):
+            legacyMigrationService?.removeLegacyAccount(item)
+            accountItems.removeAll { $0.legacyAccountID == item.legacyAccountID }
+            rowStates.removeValue(forKey: item.legacyAccountID)
+        case .instance(let item):
+            legacyMigrationService?.removeLegacyInstance(item)
+            instanceItems.removeAll { $0.legacyInstanceID == item.legacyInstanceID }
+        }
+    }
+}
+
+// MARK: - Pending Removal
+
+private enum PendingRemoval: Identifiable {
+    case account(LegacyAccountImportItem)
+    case instance(LegacyInstanceImportItem)
+
+    var id: String {
+        switch self {
+        case .account(let item):
+            return "account:\(item.id)"
+        case .instance(let item):
+            return "instance:\(item.id)"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .account(let item):
+            return item.displayName
+        case .instance(let item):
+            return item.instanceDisplayName
+        }
+    }
+
+    var confirmationTitle: String {
+        switch self {
+        case .account:
+            return String(localized: "migration.accounts.remove.title")
+        case .instance:
+            return String(localized: "migration.sources.remove.title")
+        }
+    }
+}
+
+// MARK: - Account Row
+
+private struct LegacyAccountImportRow: View {
+    let item: LegacyAccountImportItem
+    @Binding var state: LegacyAccountRowState
+    let onImport: () -> Void
+    let onRemove: () -> Void
+
+    private var canImport: Bool {
+        !state.username.isEmpty && !state.password.isEmpty && !state.isImporting
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: legacyInstanceIcon(for: item.instanceType))
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.displayName)
+                        .font(.headline)
+
+                    Text(item.instanceDisplayName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text(item.url.host ?? item.url.absoluteString)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+            }
+
+            credentialsFields
+
+            if let errorMessage = state.errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Button(role: .destructive, action: onRemove) {
+                    Text(String(localized: "common.remove"))
+                }
+                .disabled(state.isImporting)
+                .foregroundStyle(.red)
+                .tint(.red)
+
+                Spacer()
+
+                Button(action: onImport) {
+                    if state.isImporting {
+                        HStack(spacing: 6) {
                             ProgressView()
                                 .controlSize(.small)
                             Text(String(localized: "migration.importing"))
                         }
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     } else {
                         Text(String(localized: "migration.import"))
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(selectedCount > 0 ? Color.accentColor : Color.gray)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                 }
-                .disabled(selectedCount == 0 || isImporting)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+                .buttonStyle(.borderedProminent)
+                .disabled(!canImport)
             }
-            #if os(tvOS)
-            .background(Color(.systemGray).opacity(0.2))
-            #elseif os(macOS)
-            .background(Color(nsColor: .controlBackgroundColor))
-            #else
-            .background(Color(uiColor: .systemBackground))
-            #endif
         }
+        .padding(.vertical, 8)
     }
 
-    // MARK: - Result Sheet
-
     @ViewBuilder
-    private var resultSheet: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                if let result = lastResult {
-                    Spacer()
+    private var credentialsFields: some View {
+        #if os(tvOS)
+        TVSettingsTextField(title: usernameLabel, text: $state.username)
+        TVSettingsTextField(title: String(localized: "login.password"), text: $state.password, isSecure: true)
+        #else
+        TextField(usernameLabel, text: $state.username)
+            .textContentType(.username)
+            #if os(iOS)
+            .textInputAutocapitalization(.never)
+            #endif
+            .autocorrectionDisabled()
 
-                    Image(systemName: result.isFullSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .font(.system(size: 60))
-                        .foregroundStyle(result.isFullSuccess ? .green : .orange)
-
-                    Text(String(localized: "migration.partialTitle"))
-                        .font(.title2)
-                        .fontWeight(.bold)
-
-                    Text(String(
-                        format: NSLocalizedString("migration.partialMessage %lld %lld", comment: "Import result count"),
-                        result.succeeded.count,
-                        result.totalProcessed
-                    ))
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-
-                    if !result.failed.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(String(localized: "migration.failedItems"))
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-
-                            ForEach(result.failed, id: \.item.id) { failure in
-                                HStack {
-                                    Text(failure.item.displayName)
-                                        .font(.caption)
-                                    Spacer()
-                                    Text(failure.error.localizedDescription)
-                                        .font(.caption)
-                                        .foregroundStyle(.red)
-                                }
-                            }
-                        }
-                        .padding()
-                        #if os(tvOS)
-                        .background(Color(.systemGray).opacity(0.2))
-                        #elseif os(macOS)
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        #else
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        #endif
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .padding(.horizontal)
-                    }
-
-                    Spacer()
-
-                    VStack(spacing: 12) {
-                        if !result.failed.isEmpty {
-                            Button(action: retryFailed) {
-                                Text(String(localized: "migration.retry"))
-                                    .font(.headline)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.accentColor)
-                                    .foregroundStyle(.white)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                            }
-                        }
-
-                        Button(action: finishImport) {
-                            Text(String(localized: "migration.continue"))
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(result.failed.isEmpty ? Color.accentColor : Color.secondary)
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 20)
-                }
-            }
-            .padding()
-            .interactiveDismissDisabled()
-        }
-        #if os(macOS)
-        .frame(minWidth: 500, minHeight: 450)
+        SecureField(String(localized: "login.password"), text: $state.password)
+            .textContentType(.password)
         #endif
     }
 
-    // MARK: - Actions
-
-    private func loadLegacyData() {
-        items = legacyMigrationService?.parseLegacyData() ?? []
-        isLoading = false
-    }
-
-    private func toggleItem(_ item: LegacyImportItem) {
-        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
-
-        let wasSelected = items[index].isSelected
-        items[index].isSelected.toggle()
-
-        if !wasSelected && items[index].reachabilityStatus == .unknown {
-            checkReachability(for: items[index])
+    private var usernameLabel: String {
+        switch item.instanceType {
+        case .invidious:
+            return String(localized: "login.email")
+        default:
+            return String(localized: "login.username")
         }
     }
+}
 
-    private func checkReachability(for item: LegacyImportItem) {
-        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+// MARK: - Source Row
 
-        items[index].reachabilityStatus = .checking
+private struct LegacyInstanceImportRow: View {
+    let item: LegacyInstanceImportItem
+    let onImport: () -> Void
+    let onRemove: () -> Void
 
-        Task {
-            let isReachable = await legacyMigrationService?.checkReachability(for: item) ?? false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: legacyInstanceIcon(for: item.instanceType))
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28)
 
-            guard let currentIndex = items.firstIndex(where: { $0.id == item.id }) else { return }
-            items[currentIndex].reachabilityStatus = isReachable ? .reachable : .unreachable
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.instanceDisplayName)
+                        .font(.headline)
 
-            if !isReachable && items[currentIndex].isSelected {
-                pendingUnreachableItem = items[currentIndex]
-                showingUnreachableAlert = true
+                    Text(item.url.host ?? item.url.absoluteString)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+            }
+
+            HStack {
+                Button(role: .destructive, action: onRemove) {
+                    Text(String(localized: "common.remove"))
+                }
+                .foregroundStyle(.red)
+                .tint(.red)
+
+                Spacer()
+
+                Button(action: onImport) {
+                    Text(String(localized: "migration.import"))
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
+        .padding(.vertical, 8)
     }
+}
 
-    private func performImport() {
-        guard let service = legacyMigrationService else { return }
-
-        isImporting = true
-
-        Task {
-            let result = await service.importItems(items)
-            lastResult = result
-
-            isImporting = false
-
-            if result.isFullSuccess {
-                dismiss()
-            } else {
-                showingResultSheet = true
-            }
-        }
+private func legacyInstanceIcon(for type: InstanceType) -> String {
+    switch type {
+    case .invidious:
+        return "server.rack"
+    case .piped:
+        return "cloud"
+    default:
+        return "globe"
     }
+}
 
-    private func retryFailed() {
-        guard let result = lastResult else { return }
+private struct LegacyAccountRowState: Equatable {
+    var username: String
+    var password = ""
+    var errorMessage: String?
+    var isImporting = false
+}
 
-        for index in items.indices {
-            let isFailed = result.failed.contains(where: { $0.item.id == items[index].id })
-            items[index].isSelected = isFailed
-        }
-
-        showingResultSheet = false
-
-        Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            performImport()
-        }
-    }
-
-    private func finishImport() {
-        showingResultSheet = false
-        dismiss()
+struct LegacyDataImportView: View {
+    var body: some View {
+        LegacyAccountsImportView()
     }
 }
 
@@ -303,7 +415,7 @@ struct LegacyDataImportView: View {
 
 #Preview {
     NavigationStack {
-        LegacyDataImportView()
+        LegacyAccountsImportView()
     }
     .appEnvironment(.preview)
 }

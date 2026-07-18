@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct LogViewerView: View {
     @State private var loggingService = LoggingService.shared
@@ -19,47 +20,45 @@ struct LogViewerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            #if os(macOS)
-            HStack(spacing: 8) {
-                searchBar
-
-                Button {
-                    showingFilters = true
-                } label: {
-                    Label(String(localized: "settings.advanced.logs.filter"), systemImage: "line.3.horizontal.decrease.circle")
-                        .labelStyle(.iconOnly)
-                }
-                .help(String(localized: "settings.advanced.logs.filter"))
-
-                Button {
-                    showingExportSheet = true
-                } label: {
-                    Label(String(localized: "settings.advanced.logs.export"), systemImage: "square.and.arrow.up")
-                        .labelStyle(.iconOnly)
-                }
-                .help(String(localized: "settings.advanced.logs.export"))
-
-                Button(role: .destructive) {
-                    loggingService.clearLogs()
-                } label: {
-                    Label(String(localized: "settings.advanced.logs.clear"), systemImage: "trash")
-                        .labelStyle(.iconOnly)
-                }
-                .help(String(localized: "settings.advanced.logs.clear"))
-            }
-            .padding(.trailing)
-            #else
             searchBar
-            #endif
 
             // Log list
             logList
         }
+        .opaqueSettingsFormBackground()
         .navigationTitle(String(localized: "settings.advanced.logs.title"))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            #if os(macOS)
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingFilters = true
+                } label: {
+                    Label(String(localized: "settings.advanced.logs.filter"), systemImage: "line.3.horizontal.decrease.circle")
+                }
+                .help(String(localized: "settings.advanced.logs.filter"))
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showMacOSSavePanel()
+                } label: {
+                    Label(String(localized: "settings.advanced.logs.export"), systemImage: "square.and.arrow.up")
+                }
+                .help(String(localized: "settings.advanced.logs.export"))
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button(role: .destructive) {
+                    loggingService.clearLogs()
+                } label: {
+                    Label(String(localized: "settings.advanced.logs.clear"), systemImage: "trash")
+                }
+                .help(String(localized: "settings.advanced.logs.clear"))
+            }
+            #else
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button {
@@ -85,6 +84,7 @@ struct LogViewerView: View {
                     Image(systemName: "ellipsis.circle")
                 }
             }
+            #endif
         }
         .sheet(isPresented: $showingFilters) {
             LogFiltersSheet(loggingService: loggingService)
@@ -93,7 +93,7 @@ struct LogViewerView: View {
         .sheet(isPresented: $showingExportSheet) {
             LogExportOverlayView(server: logExportServer)
         }
-        #else
+        #elseif os(iOS)
         .sheet(isPresented: $showingExportSheet) {
             ShareSheet(items: [loggingService.exportLogs()])
         }
@@ -102,6 +102,22 @@ struct LogViewerView: View {
             LogEntryDetailView(entry: entry)
         }
     }
+
+    #if os(macOS)
+    private func showMacOSSavePanel() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "Yattee Logs \(Date.now.formatted(.iso8601.year().month().day())).txt"
+        panel.allowedContentTypes = [.plainText]
+
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try Data(loggingService.exportLogs().utf8).write(to: url)
+            } catch {
+                loggingService.log(level: .error, category: .general, message: "Failed to save logs export", details: error.localizedDescription)
+            }
+        }
+    }
+    #endif
 
     private var searchBar: some View {
         HStack {
@@ -278,14 +294,7 @@ private struct LogEntryDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(role: .cancel) {
-                        dismiss()
-                    } label: {
-                        Label(String(localized: "common.close"), systemImage: "xmark")
-                            .labelStyle(.iconOnly)
-                    }
-                }
+                sheetCloseToolbarItem { dismiss() }
             }
         }
         .presentationDetents([.medium, .large])

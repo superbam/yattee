@@ -28,19 +28,23 @@ final class SettingsManager {
     // Theme
     var _theme: AppTheme?
     var _accentColor: AccentColor?
+    var _customAccentColor: String?
+    var _accentColorDark: AccentColor?
+    var _customAccentColorDark: String?
+    var _useSeparateDarkAccentColor: Bool?
     var _showWatchedCheckmark: Bool?
 
     // Playback
     var _preferredQuality: VideoQuality?
     var _cellularQuality: VideoQuality?
     var _backgroundPlaybackEnabled: Bool?
-    var _dashEnabled: Bool?
     var _preferredAudioLanguage: String?
     var _preferredSubtitlesLanguage: String?
     var _playerVolume: Float?
     var _resumeAction: ResumeAction?
     var _tvOSMenuButtonClosesVideo: Bool?
     var _allowSoftwareDecodedFormats: Bool?
+    var _audioOnlyModeEnabled: Bool?
 
     // SponsorBlock
     var _sponsorBlockEnabled: Bool?
@@ -73,7 +77,10 @@ final class SettingsManager {
     var _preferPortraitBrowsing: Bool?
     #endif
     #if os(macOS)
-    var _macPlayerMode: MacPlayerMode?
+    var _macPlayerSeparateWindow: Bool?
+    var _macPlayerFloating: Bool?
+    var _macControlsBarOffsetX: Double?
+    var _macControlsBarOffsetY: Double?
     var _playerSheetAutoResize: Bool?
     #endif
 
@@ -109,6 +116,10 @@ final class SettingsManager {
     var _homeShortcutOrder: [HomeShortcutItem]?
     var _homeShortcutVisibility: [HomeShortcutItem: Bool]?
     var _homeShortcutLayout: HomeShortcutLayout?
+    var _homeShortcutCardStyle: HomeShortcutCardStyle?
+    var _homeShortcutCardColor: HomeShortcutCardColor?
+    var _homeShortcutColorfulPalette: HomeShortcutColorfulPalette?
+    var _homeShortcutCustomPaletteColors: [String]?
     var _homeSectionOrder: [HomeSectionItem]?
     var _homeSectionVisibility: [HomeSectionItem: Bool]?
     var _homeSectionItemsLimit: Int?
@@ -164,6 +175,8 @@ final class SettingsManager {
     var _zoomTransitionsEnabled: Bool?
     var _tvMatchDisplayFrameRate: Bool?
     var _tvMatchDisplayDynamicRange: Bool?
+    var _tvAudioDelayMs: Double?
+    var _tvVideoSyncMode: TVVideoSyncMode?
 
     // Details panel settings
     var _floatingDetailsPanelSide: FloatingPanelSide?
@@ -417,17 +430,21 @@ final class SettingsManager {
     func clearCache() {
         _theme = nil
         _accentColor = nil
+        _customAccentColor = nil
+        _accentColorDark = nil
+        _customAccentColorDark = nil
+        _useSeparateDarkAccentColor = nil
         _showWatchedCheckmark = nil
         _preferredQuality = nil
         _cellularQuality = nil
         _backgroundPlaybackEnabled = nil
-        _dashEnabled = nil
         _preferredAudioLanguage = nil
         _preferredSubtitlesLanguage = nil
         _playerVolume = nil
         _resumeAction = nil
         _tvOSMenuButtonClosesVideo = nil
         _allowSoftwareDecodedFormats = nil
+        _audioOnlyModeEnabled = nil
         _sponsorBlockEnabled = nil
         _sponsorBlockCategories = nil
         _sponsorBlockAPIURL = nil
@@ -461,7 +478,10 @@ final class SettingsManager {
         _syncSearchHistory = nil
         _searchHistoryLimit = nil
         #if os(macOS)
-        _macPlayerMode = nil
+        _macPlayerSeparateWindow = nil
+        _macPlayerFloating = nil
+        _macControlsBarOffsetX = nil
+        _macControlsBarOffsetY = nil
         _playerSheetAutoResize = nil
         #endif
         // miniPlayerShowVideo and miniPlayerVideoTapAction moved to preset
@@ -471,6 +491,10 @@ final class SettingsManager {
         _homeShortcutOrder = nil
         _homeShortcutVisibility = nil
         _homeShortcutLayout = nil
+        _homeShortcutCardStyle = nil
+        _homeShortcutCardColor = nil
+        _homeShortcutColorfulPalette = nil
+        _homeShortcutCustomPaletteColors = nil
         _homeSectionOrder = nil
         _homeSectionVisibility = nil
         _homeSectionItemsLimit = nil
@@ -508,6 +532,8 @@ final class SettingsManager {
         _zoomTransitionsEnabled = nil
         _tvMatchDisplayFrameRate = nil
         _tvMatchDisplayDynamicRange = nil
+        _tvAudioDelayMs = nil
+        _tvVideoSyncMode = nil
         _floatingDetailsPanelSide = nil
         _floatingDetailsPanelWidth = nil
         _landscapeDetailsPanelVisible = nil

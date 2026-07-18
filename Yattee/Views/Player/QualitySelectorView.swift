@@ -39,6 +39,11 @@ struct QualitySelectorView: View {
     /// Callback when lock state changes
     var onLockToggled: ((Bool) -> Void)?
 
+    /// Whether audio-only (music) mode is enabled
+    var isAudioMode: Bool = false
+    /// Callback when audio mode is toggled
+    var onAudioModeToggled: ((Bool) -> Void)?
+
     /// Initial tab to show when view appears
     var initialTab: QualitySelectorTab = .video
     /// Whether to show the segmented tab picker (false for focused single-tab mode)
@@ -160,6 +165,7 @@ struct QualitySelectorView: View {
         localCaptionURL: URL? = nil,
         currentRate: PlaybackRate = .x1,
         isControlsLocked: Bool = false,
+        isAudioMode: Bool = false,
         initialTab: QualitySelectorTab = .video,
         showTabPicker: Bool = true,
         onStreamSelected: @escaping (Stream, Stream?) -> Void,
@@ -168,6 +174,7 @@ struct QualitySelectorView: View {
         onSwitchToOnlineStream: @escaping (Stream, Stream?) -> Void = { _, _ in },
         onRateChanged: ((PlaybackRate) -> Void)? = nil,
         onLockToggled: ((Bool) -> Void)? = nil,
+        onAudioModeToggled: ((Bool) -> Void)? = nil,
         onDismiss: (() -> Void)? = nil
     ) {
         self.streams = streams
@@ -183,12 +190,14 @@ struct QualitySelectorView: View {
         self.showTabPicker = showTabPicker
         self.currentRate = currentRate
         self.isControlsLocked = isControlsLocked
+        self.isAudioMode = isAudioMode
         self.onStreamSelected = onStreamSelected
         self.onCaptionSelected = onCaptionSelected
         self.onLoadOnlineStreams = onLoadOnlineStreams
         self.onSwitchToOnlineStream = onSwitchToOnlineStream
         self.onRateChanged = onRateChanged
         self.onLockToggled = onLockToggled
+        self.onAudioModeToggled = onAudioModeToggled
         self.onDismiss = onDismiss
     }
 
@@ -227,7 +236,15 @@ struct QualitySelectorView: View {
         NavigationStack {
             stackRoot
         }
-        .presentationDetents([.medium, .large])
+        #if os(iOS)
+        // Rest at a taller-than-medium detent so the general section (playback
+        // speed / audio mode / lock) at the bottom of the scroll view is
+        // visible without dragging the sheet up to `.large`.
+        .presentationDetents([.fraction(0.6), .large])
+        #endif
+        #if os(macOS)
+        .frame(minWidth: 450, minHeight: 500)
+        #endif
         #endif
     }
 
@@ -271,14 +288,7 @@ struct QualitySelectorView: View {
         #endif
         #if !os(tvOS)
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(role: .cancel) {
-                    performDismiss()
-                } label: {
-                    Label(String(localized: "common.close"), systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                }
-            }
+            sheetCloseToolbarItem { performDismiss() }
         }
         #endif
         .navigationDestination(for: QualitySelectorDestination.self) { destination in
@@ -293,7 +303,10 @@ struct QualitySelectorView: View {
         }
         .onAppear {
             selectedVideoStream = currentStream
-            selectedAudioStream = currentAudioStream ?? defaultAudioStream
+            // In audio mode the audio track IS the main stream
+            selectedAudioStream = currentStream?.isAudioOnly == true
+                ? currentStream
+                : (currentAudioStream ?? defaultAudioStream)
             #if os(tvOS)
             // Defer until after the slide-in transition so the focus engine
             // has finished routing focus away from the (now hidden) player

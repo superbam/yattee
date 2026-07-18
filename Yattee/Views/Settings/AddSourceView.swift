@@ -23,6 +23,7 @@ struct AddSourceView: View {
     @State private var discoveredSMBServer: String?
     @State private var discoveredName: String?
     @State private var discoveredAllowInvalidCerts = false
+    @State private var hasLegacyAccountsToImport = false
 
     var body: some View {
         #if os(tvOS)
@@ -63,14 +64,7 @@ struct AddSourceView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 #endif
                 .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(role: .cancel) {
-                            dismiss()
-                        } label: {
-                            Label(String(localized: "common.close"), systemImage: "xmark")
-                                .labelStyle(.iconOnly)
-                        }
-                    }
+                    sheetCloseToolbarItem { dismiss() }
                 }
                 .navigationDestination(isPresented: $navigateToWebDAV) {
                     AddWebDAVView(
@@ -101,6 +95,30 @@ struct AddSourceView: View {
 
     private var listContent: some View {
         List {
+            if hasLegacyAccountsToImport {
+                Section {
+                    NavigationLink {
+                        #if os(tvOS)
+                        TVSidebarDetailContainer(
+                            systemImage: "person.badge.key",
+                            title: String(localized: "migration.accounts.title")
+                        ) {
+                            LegacyAccountsImportView(showsDoneButton: false)
+                        }
+                        #else
+                        LegacyAccountsImportView(showsDoneButton: false)
+                        #endif
+                    } label: {
+                        Label(String(localized: "migration.accounts.addSourcesLink"), systemImage: "person.badge.key")
+                        #if os(tvOS)
+                            .labelStyle(TVSourceRowLabelStyle())
+                        #endif
+                    }
+                } footer: {
+                    Text(String(localized: "migration.accounts.addSourcesFooter"))
+                }
+            }
+
             Section {
                 #if !os(tvOS)
                 NavigationLink {
@@ -213,6 +231,12 @@ struct AddSourceView: View {
                 Text(String(localized: "sources.footer.discovery"))
             }
         }
+        .task {
+            refreshLegacyAccountsVisibility()
+        }
+        .onChange(of: appEnvironment?.legacyMigrationService.legacyDataRevision ?? 0) {
+            refreshLegacyAccountsVisibility()
+        }
     }
 
     private func handleSelectedShare(_ share: DiscoveredShare) {
@@ -228,6 +252,10 @@ struct AddSourceView: View {
             discoveredSMBServer = share.host
             navigateToSMB = true
         }
+    }
+
+    private func refreshLegacyAccountsVisibility() {
+        hasLegacyAccountsToImport = appEnvironment?.legacyMigrationService.hasLegacyDataToImport() == true
     }
 }
 

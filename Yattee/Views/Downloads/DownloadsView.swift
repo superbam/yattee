@@ -27,6 +27,15 @@ struct DownloadsView: View {
         appEnvironment?.settingsManager.listStyle ?? .inset
     }
 
+    /// View options control lives on the leading edge on macOS, trailing elsewhere.
+    private var viewOptionsPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .navigation
+        #else
+        .primaryAction
+        #endif
+    }
+
     var body: some View {
         Group {
             if let manager = downloadManager, let settings = downloadSettings {
@@ -38,7 +47,14 @@ struct DownloadsView: View {
         .navigationTitle(String(localized: "downloads.title"))
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            #if os(macOS)
+            // Pin the trailing group (search field + toolbar buttons) to the right edge,
+            // matching the global Search view.
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.flexible, placement: .primaryAction)
+            }
+            #endif
+            ToolbarItem(placement: viewOptionsPlacement) {
                 if let settings = downloadSettings {
                     sortAndGroupMenu(settings)
                 }
@@ -348,7 +364,7 @@ private struct CompletedDownloadsSectionContentView: View {
     let isGroupedMode: Bool
 
     private var accentColor: Color {
-        appEnvironment?.settingsManager.accentColor.color ?? .accentColor
+        appEnvironment?.settingsManager.resolvedAccentColor ?? .accentColor
     }
 
     private var completedFiltered: [Download] {

@@ -80,6 +80,13 @@ struct MiniPlayerView: View {
     /// Handle tap on video preview - action based on settings (PiP or expand)
     /// When video is disabled, always expand player since PiP needs the video view mounted
     private func handleVideoPreviewTap() {
+        // Don't start PiP while the expanded player is open (or opening) — PiP
+        // would play alongside the player window. Bring the window forward instead.
+        if let nav = navigationCoordinator, nav.isPlayerExpanded || nav.isPlayerExpanding {
+            nav.expandPlayer()
+            return
+        }
+
         // If video is disabled in mini player, always expand (can't start PiP without video view)
         guard miniPlayerSettings.showVideo else {
             navigationCoordinator?.expandPlayer()
@@ -96,6 +103,16 @@ struct MiniPlayerView: View {
         case .expandPlayer:
             navigationCoordinator?.expandPlayer()
         }
+    }
+
+    /// Closes the current video: stops playback, clears the queue, and dismisses
+    /// the expanded player (so the separate macOS player window is hidden too).
+    private func closeVideo() {
+        playerState?.isClosingVideo = true
+        queueManager?.clearQueue()
+        // Stop the player before dismissing the window so the backend is torn down first.
+        playerService?.stop()
+        navigationCoordinator?.isPlayerExpanded = false
     }
 
     /// Expand player, restoring from PiP first if needed
@@ -115,17 +132,20 @@ struct MiniPlayerView: View {
 
     var body: some View {
         Group {
+            #if os(macOS)
+            macOSCapsuleLayout
+            #else
             if isTabAccessory {
                 accessoryLayout
             } else {
                 overlayLayout
             }
+            #endif
         }
         .accessibilityIdentifier("player.miniPlayer")
         .accessibilityLabel("player.miniPlayer")
         .modifier(MiniPlayerContextMenuModifier(video: currentVideo) {
-            queueManager?.clearQueue()
-            playerService?.stop()
+            closeVideo()
         })
         .task {
             await loadMiniPlayerSettings()
@@ -216,13 +236,7 @@ struct MiniPlayerView: View {
                     foregroundStyle: .primary
                 )
 
-                if let authorName = currentVideo?.author.name, !authorName.isEmpty {
-                    MarqueeText(
-                        text: authorName,
-                        font: .caption,
-                        foregroundStyle: .secondary
-                    )
-                }
+                authorLine(font: .caption)
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -245,6 +259,98 @@ struct MiniPlayerView: View {
         .padding(.vertical, 8)
         .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) {
+            progressLine
+        }
+    }
+
+    // MARK: - macOS Capsule Layout
+
+    #if os(macOS)
+    /// Compact, centered capsule shown in the main window on macOS (Music.app style).
+    /// The expanded player lives in a separate window, so this stays visible alongside it.
+    private var macOSCapsuleLayout: some View {
+        HStack(spacing: 10) {
+            // Video preview - tap for PiP (or expand if PiP unavailable)
+            videoPreviewView
+                .frame(width: 44, height: 26)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    handleVideoPreviewTap()
+                }
+
+            // Title/author area - tap to expand player (restores from PiP first if needed)
+            VStack(alignment: .leading, spacing: 1) {
+                MarqueeText(
+                    text: displayTitle,
+                    font: .subheadline,
+                    fontWeight: .medium,
+                    foregroundStyle: .primary
+                )
+
+                authorLine(font: .caption)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                expandPlayerWithPiPRestore()
+            }
+
+            // Dynamic buttons from settings (includes close by default - no separate close button)
+            buttonsView
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: 420)
+        .glassBackground(.regular, in: .capsule, fallback: .regularMaterial)
+        .overlay(alignment: .bottom) {
+            progressLine
+        }
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
+    }
+    #endif
+
+    // MARK: - Shared Components
+
+    /// Author line with a red LIVE indicator for live streams.
+    /// MarqueeText draws its text at the top of a fixed-height frame, so the badge
+    /// is top-aligned with it (dot stays centered against the LIVE text only).
+    @ViewBuilder
+    private func authorLine(font: Font) -> some View {
+        let authorName = currentVideo?.author.name ?? ""
+        if playerState?.isLive == true {
+            HStack(alignment: .top, spacing: 4) {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 6, height: 6)
+                    Text(String(localized: "player.live"))
+                        .font(font.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
+                .fixedSize()
+
+                if !authorName.isEmpty {
+                    MarqueeText(
+                        text: authorName,
+                        font: font,
+                        foregroundStyle: .secondary
+                    )
+                }
+            }
+        } else if !authorName.isEmpty {
+            MarqueeText(
+                text: authorName,
+                font: font,
+                foregroundStyle: .secondary
+            )
+        }
+    }
+
+    /// Bottom progress line; hidden for live streams where progress is meaningless.
+    @ViewBuilder
+    private var progressLine: some View {
+        if playerState?.isLive != true {
             GeometryReader { geo in
                 Rectangle()
                     .fill(.red)
@@ -253,8 +359,6 @@ struct MiniPlayerView: View {
             .frame(height: 2)
         }
     }
-
-    // MARK: - Shared Components
 
     /// Video preview that shows live video when available, or thumbnail as fallback.
     @ViewBuilder
@@ -354,6 +458,8 @@ struct MiniPlayerView: View {
             pipButton(config: config)
         case .playbackSpeed:
             playbackSpeedButton(config: config)
+        case .audioMode:
+            audioModeButton(config: config)
         default:
             EmptyView()
         }
@@ -425,8 +531,7 @@ struct MiniPlayerView: View {
 
     private var closeButton: some View {
         Button {
-            queueManager?.clearQueue()
-            playerService?.stop()
+            closeVideo()
         } label: {
             Image(systemName: "xmark")
                 .font(.subheadline)
@@ -442,10 +547,25 @@ struct MiniPlayerView: View {
             incrementTapCount(for: config)
             navigationCoordinator?.isMiniPlayerQueueSheetPresented = true
         } label: {
-            Image(systemName: "list.bullet")
-                .font(isTabAccessory ? .title3 : .title2)
-                .frame(width: 32, height: 32)
-                .contentShape(Rectangle())
+            ZStack(alignment: .bottom) {
+                Image(systemName: "list.bullet")
+                    .font(isTabAccessory ? .title3 : .title2)
+                    .frame(width: 32, height: 32)
+
+                // Badge showing queue count
+                let queueCount = playerState?.queue.count ?? 0
+                if queueCount > 0 {
+                    Text("\(queueCount)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.accentColor, in: Capsule())
+                        .offset(y: 4)
+                        .allowsHitTesting(false)
+                }
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -490,6 +610,12 @@ struct MiniPlayerView: View {
     private func pipButton(config: ControlButtonConfiguration) -> some View {
         Button {
             incrementTapCount(for: config)
+            // Don't start PiP while the expanded player is open (or opening) — PiP
+            // would play alongside the player window. Bring the window forward instead.
+            if let nav = navigationCoordinator, nav.isPlayerExpanded || nav.isPlayerExpanding {
+                nav.expandPlayer()
+                return
+            }
             if let backend = playerService?.currentBackend as? MPVBackend {
                 backend.startPiP()
             }
@@ -528,6 +654,21 @@ struct MiniPlayerView: View {
         }
         .menuIndicator(.hidden)
         .tint(.primary)
+    }
+
+    private func audioModeButton(config: ControlButtonConfiguration) -> some View {
+        let isAudioMode = appEnvironment?.settingsManager.audioOnlyModeEnabled ?? false
+        return Button {
+            incrementTapCount(for: config)
+            Task { await playerService?.setAudioMode(!isAudioMode) }
+        } label: {
+            Image(systemName: "music.note")
+                .font(isTabAccessory ? .title3 : .title2)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+                .foregroundStyle(isAudioMode ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Helpers

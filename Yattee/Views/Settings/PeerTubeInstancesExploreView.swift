@@ -93,17 +93,23 @@ struct PeerTubeInstancesExploreView: View {
         .task {
             await loadAllInstances()
         }
+        #if !os(macOS)
         .sheet(isPresented: $showFiltersSheet) {
-            PeerTubeFiltersSheet(
-                filters: $filters,
-                languages: availableLanguages,
-                countries: availableCountries,
-                onApply: {
-                    // Reset display limit when filters change
-                    displayLimit = pageSize
-                }
-            )
+            filtersSheetContent
         }
+        #endif
+    }
+
+    private var filtersSheetContent: some View {
+        PeerTubeFiltersSheet(
+            filters: $filters,
+            languages: availableLanguages,
+            countries: availableCountries,
+            onApply: {
+                // Reset display limit when filters change
+                displayLimit = pageSize
+            }
+        )
     }
 
     // MARK: - Content
@@ -215,16 +221,16 @@ struct PeerTubeInstancesExploreView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         #if !os(tvOS)
-        ToolbarItem(placement: .confirmationAction) {
-            Button(role: .cancel) {
-                dismiss()
-            } label: {
-                Label(String(localized: "common.close"), systemImage: "xmark")
-                    .labelStyle(.iconOnly)
-            }
-        }
+        sheetCloseToolbarItem { dismiss() }
         #endif
 
+        #if os(macOS)
+        // Pin the trailing group (search field + toolbar buttons) to the right edge,
+        // matching the global Search view.
+        if #available(macOS 26, *) {
+            ToolbarSpacer(.flexible, placement: .primaryAction)
+        }
+        #endif
         ToolbarItem(placement: .primaryAction) {
             Button {
                 showFiltersSheet = true
@@ -234,6 +240,11 @@ struct PeerTubeInstancesExploreView: View {
                     systemImage: filters.isDefault ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill"
                 )
             }
+            #if os(macOS)
+            .popover(isPresented: $showFiltersSheet, arrowEdge: .bottom) {
+                filtersSheetContent
+            }
+            #endif
         }
     }
 

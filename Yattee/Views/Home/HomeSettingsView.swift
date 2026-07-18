@@ -12,6 +12,10 @@ struct HomeSettingsView: View {
 
     // Local state for editing (copied from settings on appear, saved on dismiss)
     @State private var shortcutLayout: HomeShortcutLayout = .cards
+    @State private var shortcutCardStyle: HomeShortcutCardStyle = .regular
+    @State private var shortcutCardColor: HomeShortcutCardColor = .soft
+    @State private var shortcutColorfulPalette: HomeShortcutColorfulPalette = .accent
+    @State private var shortcutCustomPaletteColors: [String] = []
     @State private var shortcutOrder: [HomeShortcutItem] = []
     @State private var shortcutVisibility: [HomeShortcutItem: Bool] = [:]
     @State private var sectionOrder: [HomeSectionItem] = []
@@ -23,10 +27,21 @@ struct HomeSettingsView: View {
     @State private var availableShortcutsByInstance: [(instance: Instance, cards: [HomeShortcutItem])] = []
     @State private var availableSectionsByInstance: [(instance: Instance, sections: [HomeSectionItem])] = []
     @State private var availableShortcutsByMediaSource: [(source: MediaSource, cards: [HomeShortcutItem])] = []
-    @State private var availableSectionsByMediaSource: [(source: MediaSource, sections: [HomeSectionItem])] = []
     
     // Edit mode for delete functionality
     @State private var isEditMode = false
+
+    // Load settings only once per presentation: pushing a child page (e.g. the
+    // card style view) fires onDisappear/onAppear on this view, and re-running
+    // loadSettings on pop-back would clobber edits made through bindings.
+    @State private var hasLoadedSettings = false
+
+    #if os(macOS)
+    // macOS: drive the style page programmatically. A List-embedded NavigationLink
+    // gets stuck in the selected (blue) state after popping back and can't be
+    // re-activated, so navigate via navigationDestination(isPresented:) instead.
+    @State private var showingStyleSettings = false
+    #endif
 
     private var settingsManager: SettingsManager? { appEnvironment?.settingsManager }
 
@@ -45,7 +60,17 @@ struct HomeSettingsView: View {
         #endif
         #if os(macOS)
         .listStyle(.inset)
+        .navigationDestination(isPresented: $showingStyleSettings) {
+            HomeShortcutStyleView(
+                style: $shortcutCardStyle,
+                color: $shortcutCardColor,
+                palette: $shortcutColorfulPalette,
+                customColors: $shortcutCustomPaletteColors,
+                onSave: saveSettingsIfLoaded
+            )
+        }
         #endif
+        .opaqueSettingsFormBackground()
         #if !os(tvOS)
         .navigationTitle(String(localized: "home.settings.title"))
         #endif
@@ -53,6 +78,8 @@ struct HomeSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .onAppear {
+            guard !hasLoadedSettings else { return }
+            hasLoadedSettings = true
             loadSettings()
         }
         .onDisappear {
@@ -73,6 +100,43 @@ struct HomeSettingsView: View {
                 }
             }
             .pickerStyle(.segmented)
+
+            // Card style (Compact / Regular) — navigates to a page with a
+            // selector and a live preview. Only for cards layout.
+            if shortcutLayout == .cards {
+                #if os(macOS)
+                Button {
+                    showingStyleSettings = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Label(String(localized: "home.settings.shortcuts.style"), systemImage: "paintpalette")
+                        Spacer()
+                        Text(shortcutCardStyle.displayName)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                #else
+                SettingsNavigationRow(
+                    "home.settings.shortcuts.style",
+                    systemImage: "paintpalette",
+                    trailing: { Text(shortcutCardStyle.displayName) }
+                ) {
+                    HomeShortcutStyleView(
+                        style: $shortcutCardStyle,
+                        color: $shortcutCardColor,
+                        palette: $shortcutColorfulPalette,
+                        customColors: $shortcutCustomPaletteColors,
+                        onSave: saveSettingsIfLoaded
+                    )
+                }
+                #endif
+            }
             #endif
 
             #if os(tvOS)
@@ -174,7 +238,7 @@ struct HomeSettingsView: View {
     
     private var availableSectionsSection: some View {
         Section {
-            if availableSectionsByInstance.isEmpty && availableSectionsByMediaSource.isEmpty {
+            if availableSectionsByInstance.isEmpty {
                 Text(String(localized: "home.settings.availableSections.empty"))
                     .foregroundStyle(.secondary)
                     .italic()
@@ -182,11 +246,6 @@ struct HomeSettingsView: View {
                 ForEach(availableSectionsByInstance, id: \.instance.id) { item in
                     ForEach(item.sections) { section in
                         availableSectionRow(for: section, instance: item.instance)
-                    }
-                }
-                ForEach(availableSectionsByMediaSource, id: \.source.id) { item in
-                    ForEach(item.sections) { section in
-                        availableMediaSourceSectionRow(for: section, source: item.source)
                     }
                 }
             }
@@ -268,6 +327,10 @@ struct HomeSettingsView: View {
               let env = appEnvironment else { return }
 
         shortcutLayout = settings.homeShortcutLayout
+        shortcutCardStyle = settings.homeShortcutCardStyle
+        shortcutCardColor = settings.homeShortcutCardColor
+        shortcutColorfulPalette = settings.homeShortcutColorfulPalette
+        shortcutCustomPaletteColors = settings.homeShortcutCustomPaletteColors
         shortcutOrder = settings.homeShortcutOrder
         shortcutVisibility = settings.homeShortcutVisibility
         sectionOrder = settings.homeSectionOrder
@@ -282,12 +345,20 @@ struct HomeSettingsView: View {
 
         let sources = env.mediaSourcesManager.sources
         availableShortcutsByMediaSource = settings.allAvailableMediaSourceShortcuts(sources: sources)
-        availableSectionsByMediaSource = settings.allAvailableMediaSourceSections(sources: sources)
+    }
+
+    private func saveSettingsIfLoaded() {
+        guard hasLoadedSettings else { return }
+        saveSettings()
     }
 
     private func saveSettings() {
         guard let settings = settingsManager else { return }
         settings.homeShortcutLayout = shortcutLayout
+        settings.homeShortcutCardStyle = shortcutCardStyle
+        settings.homeShortcutCardColor = shortcutCardColor
+        settings.homeShortcutColorfulPalette = shortcutColorfulPalette
+        settings.homeShortcutCustomPaletteColors = shortcutCustomPaletteColors
         settings.homeShortcutOrder = shortcutOrder
         settings.homeShortcutVisibility = shortcutVisibility
         settings.homeSectionOrder = sectionOrder
@@ -330,16 +401,14 @@ struct HomeSettingsView: View {
         switch section {
         case .instanceContent(let instanceID, let contentType):
             settingsManager?.addToHome(instanceID: instanceID, contentType: contentType, asCard: false)
-        case .mediaSource(let sourceID):
-            settingsManager?.addToHome(sourceID: sourceID, asCard: false)
         default:
             break
         }
-        
+
         // Reload available items
         loadSettings()
     }
-    
+
     private func removeShortcut(_ card: HomeShortcutItem) {
         // Remove from local state
         shortcutOrder.removeAll { $0.id == card.id }
@@ -368,16 +437,14 @@ struct HomeSettingsView: View {
         switch section {
         case .instanceContent(let instanceID, let contentType):
             settingsManager?.removeFromHome(instanceID: instanceID, contentType: contentType)
-        case .mediaSource(let sourceID):
-            settingsManager?.removeFromHome(sourceID: sourceID)
         default:
             break
         }
-        
+
         // Reload available items
         loadSettings()
     }
-    
+
     private func canDelete(shortcut: HomeShortcutItem) -> Bool {
         if case .instanceContent = shortcut {
             return true
@@ -390,9 +457,6 @@ struct HomeSettingsView: View {
     
     private func canDelete(section: HomeSectionItem) -> Bool {
         if case .instanceContent = section {
-            return true
-        }
-        if case .mediaSource = section {
             return true
         }
         return false
@@ -502,35 +566,6 @@ struct HomeSettingsView: View {
                     }
                 }
             }
-        case .mediaSource(let sourceID):
-            if let source = appEnvironment?.mediaSourcesManager.sources.first(where: { $0.id == sourceID }) {
-                let isDisabled = !source.isEnabled
-                
-                HomeItemRow(
-                    icon: source.type.systemImage,
-                    title: "\(source.name) (\(source.type.displayName))",
-                    isVisible: sectionBinding(for: section),
-                    isDisabled: isDisabled,
-                    disabledReason: isDisabled ? String(localized: "home.settings.sourceDisabled") : nil
-                )
-                #if os(iOS)
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) {
-                        removeSection(section)
-                    } label: {
-                        Label(String(localized: "home.settings.remove"), systemImage: "trash")
-                    }
-                    .tint(.red)
-                }
-                #endif
-                .contextMenu {
-                    Button(role: .destructive) {
-                        removeSection(section)
-                    } label: {
-                        Label(String(localized: "home.settings.remove"), systemImage: "trash")
-                    }
-                }
-            }
         default:
             HomeItemRow(
                 icon: section.icon,
@@ -539,7 +574,7 @@ struct HomeSettingsView: View {
             )
         }
     }
-    
+
     @ViewBuilder
     private func availableShortcutRow(for card: HomeShortcutItem, instance: Instance) -> some View {
         if case .instanceContent(_, let contentType) = card {
@@ -638,37 +673,6 @@ struct HomeSettingsView: View {
                 
                 Button {
                     addShortcut(card)
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(.green)
-                        .imageScale(.large)
-                }
-                .buttonStyle(.plain)
-                .disabled(isDisabled)
-            }
-            #if !os(tvOS)
-            .help(isDisabled ? String(localized: "home.settings.sourceDisabled") : "")
-            #endif
-        }
-    }
-    
-    @ViewBuilder
-    private func availableMediaSourceSectionRow(for section: HomeSectionItem, source: MediaSource) -> some View {
-        if case .mediaSource = section {
-            let isDisabled = !source.isEnabled
-            
-            HStack {
-                Image(systemName: source.type.systemImage)
-                    .frame(width: 24)
-                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                
-                Text("\(source.name) (\(source.type.displayName))")
-                    .foregroundStyle(isDisabled ? .tertiary : .primary)
-                
-                Spacer()
-                
-                Button {
-                    addSection(section)
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .foregroundStyle(.green)

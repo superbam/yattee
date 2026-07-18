@@ -114,14 +114,7 @@ struct ErrorDetailsSheet: View {
             #endif
             .toolbar {
                 #if !os(tvOS)
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(role: .cancel) {
-                        dismiss()
-                    } label: {
-                        Label(String(localized: "common.close"), systemImage: "xmark")
-                            .labelStyle(.iconOnly)
-                    }
-                }
+                sheetCloseToolbarItem { dismiss() }
 
                 ToolbarItemGroup(placement: .primaryAction) {
                     // Copy button
@@ -143,6 +136,9 @@ struct ErrorDetailsSheet: View {
         }
         #if os(iOS)
         .presentationDetents([.medium])
+        #endif
+        #if os(macOS)
+        .frame(minWidth: 450, minHeight: 300)
         #endif
     }
 

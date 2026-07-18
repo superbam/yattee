@@ -89,14 +89,7 @@ struct PlaylistSelectorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(role: .cancel) {
-                        dismiss()
-                    } label: {
-                        Label(String(localized: "common.close"), systemImage: "xmark")
-                            .labelStyle(.iconOnly)
-                    }
-                }
+                sheetCloseToolbarItem { dismiss() }
             }
             #endif
             .sheet(isPresented: $showingNewPlaylist) {
@@ -114,7 +107,12 @@ struct PlaylistSelectorSheet: View {
                 loadPlaylists()
             }
         }
+        #if os(iOS)
         .presentationDetents([.medium, .large])
+        #endif
+        #if os(macOS)
+        .frame(minWidth: 450, minHeight: 500)
+        #endif
     }
 
     private func loadPlaylists() {
