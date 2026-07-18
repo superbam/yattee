@@ -59,7 +59,7 @@ module UITest
 
       # App bundle identifier
       def bundle_id
-        'stream.yattee.app'
+        'com.bammcm.yattee'
       end
 
       # Yattee Server URL for testing (configurable via env)
