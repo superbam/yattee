@@ -137,6 +137,14 @@ struct HomeView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 loadData()
+                // `.task` only runs once when the view first appears, so on
+                // resume (app stays alive, HomeView identity persists) the
+                // Popular/Trending instance sections never get re-checked for
+                // staleness without this. Mirrors the SubscriptionFeedCache
+                // warm-on-active handling in YatteeApp.swift.
+                Task {
+                    await refreshHomeInstanceContent()
+                }
             }
         }
         .task {
