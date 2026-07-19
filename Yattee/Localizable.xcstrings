@@ -14540,6 +14540,28 @@
         }
       }
     },
+    "settings.sidebar.startup.source" : {
+      "comment" : "Label for sidebar startup source (instance) picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Source"
+          }
+        }
+      }
+    },
+    "settings.sidebar.startup.source.list" : {
+      "comment" : "Option to show the Sources list instead of a specific instance on startup",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sources List"
+          }
+        }
+      }
+    },
     "settings.sidebar.startup.tab" : {
       "comment" : "Label for sidebar startup item picker",
       "localizations" : {
@@ -15169,6 +15191,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Startup"
+          }
+        }
+      }
+    },
+    "settings.tabBar.startup.source" : {
+      "comment" : "Label for tab bar startup source (instance) picker",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Source"
+          }
+        }
+      }
+    },
+    "settings.tabBar.startup.source.list" : {
+      "comment" : "Option to show the Sources list instead of a specific instance on startup",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sources List"
           }
         }
       }

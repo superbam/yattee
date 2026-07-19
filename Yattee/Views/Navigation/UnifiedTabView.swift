@@ -94,6 +94,15 @@ struct UnifiedTabView: View {
 
         let startupTab = settingsManager?.effectiveStartupTabForSidebar() ?? .home
         selection = startupTab.sidebarItem
+
+        // If the startup tab is Sources and a specific instance was configured
+        // (e.g. an Invidious instance's Feed/Popular/Trending/Discover screen),
+        // push straight to it instead of showing the Sources list.
+        if startupTab == .sources,
+           let instanceID = settingsManager?.sidebarStartupInstanceID,
+           let instance = appEnvironment?.instancesManager.instances.first(where: { $0.id == instanceID && $0.isEnabled }) {
+            sourcesPath.append(NavigationDestination.instanceBrowse(instance))
+        }
     }
 
     // MARK: - Visible Main Items
@@ -412,6 +421,15 @@ struct UnifiedTabView: View {
 
         let startupTab = settingsManager?.effectiveStartupTabForSidebar() ?? .home
         selection = startupTab.sidebarItem
+
+        // If the startup tab is Sources and a specific instance was configured
+        // (e.g. an Invidious instance's Feed/Popular/Trending/Discover screen),
+        // push straight to it instead of showing the Sources list.
+        if startupTab == .sources,
+           let instanceID = settingsManager?.sidebarStartupInstanceID,
+           let instance = appEnvironment?.instancesManager.instances.first(where: { $0.id == instanceID && $0.isEnabled }) {
+            sourcesPath.append(NavigationDestination.instanceBrowse(instance))
+        }
     }
 
     // MARK: - Visible Main Items
@@ -672,6 +690,15 @@ struct UnifiedTabView: View {
 
         let startupTab = settingsManager?.effectiveStartupTabForSidebar() ?? .home
         selection = startupTab.sidebarItem
+
+        // If the startup tab is Sources and a specific instance was configured
+        // (e.g. an Invidious instance's Feed/Popular/Trending/Discover screen),
+        // push straight to it instead of showing the Sources list.
+        if startupTab == .sources,
+           let instanceID = settingsManager?.sidebarStartupInstanceID,
+           let instance = appEnvironment?.instancesManager.instances.first(where: { $0.id == instanceID && $0.isEnabled }) {
+            sourcesPath.append(NavigationDestination.instanceBrowse(instance))
+        }
     }
 
     // MARK: - Visible Main Items

@@ -27,6 +27,19 @@ struct TabBarSettingsView: View {
         )
     }
 
+    private var startupInstanceBinding: Binding<UUID?> {
+        Binding(
+            get: { settingsManager?.tabBarStartupInstanceID },
+            set: { settingsManager?.tabBarStartupInstanceID = $0 }
+        )
+    }
+
+    /// Enabled instances (Invidious/Piped/etc.) that can be selected as a
+    /// direct startup screen, bypassing the Sources list.
+    private var availableStartupInstances: [Instance] {
+        appEnvironment?.instancesManager.instances.filter { $0.isEnabled } ?? []
+    }
+
     /// Valid startup tabs based on current visibility settings.
     private var validStartupTabs: [SidebarMainItem] {
         // Fixed tabs always available
@@ -68,6 +81,14 @@ struct TabBarSettingsView: View {
             Picker(String(localized: "settings.tabBar.startup.tab"), selection: startupTabBinding) {
                 ForEach(validStartupTabs) { item in
                     Text(item.localizedTitle).tag(item)
+                }
+            }
+            if startupTabBinding.wrappedValue == .sources, !availableStartupInstances.isEmpty {
+                Picker(String(localized: "settings.tabBar.startup.source"), selection: startupInstanceBinding) {
+                    Text(String(localized: "settings.tabBar.startup.source.list")).tag(UUID?.none)
+                    ForEach(availableStartupInstances) { instance in
+                        Text(instance.displayName).tag(Optional(instance.id))
+                    }
                 }
             }
         } header: {
@@ -120,6 +141,7 @@ struct TabBarSettingsView: View {
                    let mainItem = SidebarMainItem(tabBarItem: item),
                    settings.tabBarStartupTab == mainItem {
                     settings.tabBarStartupTab = .home
+                    settings.tabBarStartupInstanceID = nil
                 }
             }
         )

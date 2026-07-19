@@ -115,6 +115,19 @@ struct SidebarSettingsView: View {
         )
     }
 
+    private var startupInstanceBinding: Binding<UUID?> {
+        Binding(
+            get: { settingsManager?.sidebarStartupInstanceID },
+            set: { settingsManager?.sidebarStartupInstanceID = $0 }
+        )
+    }
+
+    /// Enabled instances (Invidious/Piped/etc.) that can be selected as a
+    /// direct startup screen, bypassing the Sources list.
+    private var availableStartupInstances: [Instance] {
+        appEnvironment?.instancesManager.instances.filter { $0.isEnabled } ?? []
+    }
+
     /// Valid startup tabs based on current visibility settings.
     private var validStartupTabs: [SidebarMainItem] {
         // Filter main items by visibility (respecting required items and platform availability)
@@ -167,6 +180,14 @@ struct SidebarSettingsView: View {
             PlatformMenuPicker(String(localized: "settings.sidebar.startup.tab"), selection: startupTabBinding) {
                 ForEach(validStartupTabs) { item in
                     Text(item.localizedTitle).tag(item)
+                }
+            }
+            if startupTabBinding.wrappedValue == .sources, !availableStartupInstances.isEmpty {
+                PlatformMenuPicker(String(localized: "settings.sidebar.startup.source"), selection: startupInstanceBinding) {
+                    Text(String(localized: "settings.sidebar.startup.source.list")).tag(UUID?.none)
+                    ForEach(availableStartupInstances) { instance in
+                        Text(instance.displayName).tag(Optional(instance.id))
+                    }
                 }
             }
         } header: {
@@ -268,6 +289,7 @@ struct SidebarSettingsView: View {
                 // Reset startup tab to Home if the hidden item was the startup tab
                 if !newValue, settingsManager?.sidebarStartupTab == item {
                     settingsManager?.sidebarStartupTab = .home
+                    settingsManager?.sidebarStartupInstanceID = nil
                 }
             }
         )

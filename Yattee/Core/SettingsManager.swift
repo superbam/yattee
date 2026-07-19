@@ -139,6 +139,7 @@ final class SettingsManager {
     var _sidebarMainItemOrder: [SidebarMainItem]?
     var _sidebarMainItemVisibility: [SidebarMainItem: Bool]?
     var _sidebarStartupTab: SidebarMainItem?
+    var _sidebarStartupInstanceID: UUID?
     #if os(tvOS)
     var _tvOSOpenToSubscriptionsAtLaunch: Bool?
     var _tvOSStartupTabBeforeSubscriptionsDefault: SidebarMainItem?
@@ -146,6 +147,7 @@ final class SettingsManager {
 
     // Tab bar startup
     var _tabBarStartupTab: SidebarMainItem?
+    var _tabBarStartupInstanceID: UUID?
     var _sidebarSourcesEnabled: Bool?
     var _sidebarSourceSort: SidebarSourceSort?
     var _sidebarSourcesLimitEnabled: Bool?
@@ -505,7 +507,9 @@ final class SettingsManager {
         _sidebarMainItemOrder = nil
         _sidebarMainItemVisibility = nil
         _sidebarStartupTab = nil
+        _sidebarStartupInstanceID = nil
         _tabBarStartupTab = nil
+        _tabBarStartupInstanceID = nil
         #if os(tvOS)
         _tvOSOpenToSubscriptionsAtLaunch = nil
         _tvOSStartupTabBeforeSubscriptionsDefault = nil

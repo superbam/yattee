@@ -1019,6 +1019,26 @@ extension SettingsManager {
         }
     }
 
+    /// The specific instance to open directly to on launch when
+    /// `tabBarStartupTab` is `.sources` (e.g. an Invidious instance's
+    /// Feed/Popular/Trending/Discover screen). `nil` shows the Sources list
+    /// as usual.
+    var tabBarStartupInstanceID: UUID? {
+        get {
+            if let cached = _tabBarStartupInstanceID { return cached }
+            guard let rawValue = string(for: .tabBarStartupInstanceID),
+                  let uuid = UUID(uuidString: rawValue) else {
+                return nil
+            }
+            _tabBarStartupInstanceID = uuid
+            return uuid
+        }
+        set {
+            _tabBarStartupInstanceID = newValue
+            set(newValue?.uuidString ?? "", for: .tabBarStartupInstanceID)
+        }
+    }
+
     /// The startup tab for sidebar mode (iPad/Mac/tvOS). Default is home.
     var sidebarStartupTab: SidebarMainItem {
         get {
@@ -1031,6 +1051,24 @@ extension SettingsManager {
         set {
             _sidebarStartupTab = newValue
             set(newValue.rawValue, for: .sidebarStartupTab)
+        }
+    }
+
+    /// The specific instance to open directly to on launch when
+    /// `sidebarStartupTab` is `.sources`. `nil` shows the Sources list as usual.
+    var sidebarStartupInstanceID: UUID? {
+        get {
+            if let cached = _sidebarStartupInstanceID { return cached }
+            guard let rawValue = string(for: .sidebarStartupInstanceID),
+                  let uuid = UUID(uuidString: rawValue) else {
+                return nil
+            }
+            _sidebarStartupInstanceID = uuid
+            return uuid
+        }
+        set {
+            _sidebarStartupInstanceID = newValue
+            set(newValue?.uuidString ?? "", for: .sidebarStartupInstanceID)
         }
     }
 
