@@ -54,14 +54,12 @@ env:
 jobs:
   determine_build_number:
     name: Determine build number
-    runs-on: macos-15
+    runs-on: macos-26
     outputs:
       build_number: ${{ steps.calc.outputs.build_number }}
       version_number: ${{ steps.version.outputs.version_number }}
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -86,11 +84,9 @@ jobs:
     if: ${{ inputs.build_ios }}
     needs: [determine_build_number]
     name: Release iOS to TestFlight
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -114,11 +110,9 @@ jobs:
     if: ${{ inputs.build_tvos }}
     needs: [determine_build_number]
     name: Release tvOS to TestFlight
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -142,11 +136,9 @@ jobs:
     if: ${{ inputs.build_mac_beta }}
     needs: [determine_build_number]
     name: Release macOS to TestFlight
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -170,14 +162,12 @@ jobs:
     if: ${{ inputs.build_mac_notarized }}
     needs: [determine_build_number]
     name: Build and notarize macOS app
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       BUILD_NUMBER: ${{ needs.determine_build_number.outputs.build_number }}
       VERSION_NUMBER: ${{ needs.determine_build_number.outputs.version_number }}
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -257,7 +247,7 @@ jobs:
     if: ${{ inputs.build_mac_notarized && inputs.create_release && !cancelled() && !failure() }}
     needs: [determine_build_number, mac_notarized, release]
     name: Publish Sparkle appcast
-    runs-on: macos-15
+    runs-on: macos-26
     permissions:
       contents: write
     env:
@@ -277,8 +267,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.REPO_TOKEN }}
-      - name: Select Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app
       - name: Download notarized mac artifact
         uses: actions/download-artifact@v4
         with:
@@ -301,12 +289,9 @@ jobs:
           echo "sign_update=$SIGN" >> "$GITHUB_OUTPUT"
       - name: Checkout gh-pages (create if missing)
         run: |
-          # Fetch into a local branch: actions/checkout configures a narrow
-          # refspec, so a plain `git fetch origin gh-pages` never creates
-          # origin/gh-pages, and a detached worktree has no local branch for
-          # `git push origin gh-pages` to resolve.
-          if git fetch origin +refs/heads/gh-pages:refs/heads/gh-pages; then
-            git worktree add gh-pages gh-pages
+          git fetch origin gh-pages || true
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git worktree add gh-pages origin/gh-pages
           else
             # First run — create orphan gh-pages with only appcast scaffolding.
             git worktree add --detach gh-pages HEAD
@@ -356,10 +341,5 @@ jobs:
           fi
 
   update_altstore:
-    # Only when an iOS IPA was actually built and released — a mac/tvOS-only
-    # release has no IPA and would corrupt the AltStore source.
-    if: ${{ inputs.build_ios && success() }}
     needs: [release]
     uses: ./.github/workflows/update-altstore.yml
-    with:
-      tag: ${{ needs.release.outputs.tag }}
