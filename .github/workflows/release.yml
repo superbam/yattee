@@ -342,4 +342,6 @@ jobs:
 
   update_altstore:
     needs: [release]
+    permissions:
+      contents: write
     uses: ./.github/workflows/update-altstore.yml
