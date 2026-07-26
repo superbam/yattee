@@ -112,3 +112,9 @@ spec/ui_snapshots/diff/
 # Environment variables (contains secrets)
 .env
 .env.local
+
+# macOS
+.DS_Store
+
+# Coding-agent scratch state (belongs under ~/.claude, not the repo)
+memory/
