@@ -19,6 +19,7 @@ struct PrivacySettingsView: View {
             incognitoSection
             historySection
             searchSection
+            notRecommendSection
         }
         #if !os(tvOS)
         .navigationTitle(String(localized: "settings.privacy.title"))
@@ -29,6 +30,23 @@ struct PrivacySettingsView: View {
     }
 
     // MARK: - Sections
+
+    /// FORK (norecommend): only shown when signed into an instance that has
+    /// the fork's API — stock Invidious 404s these endpoints, so the entry
+    /// point is hidden rather than left to fail.
+    @ViewBuilder
+    private var notRecommendSection: some View {
+        if appEnvironment?.notRecommendService.isAvailable == true {
+            SettingsFormSection(footer: "settings.notRecommend.footer") {
+                SettingsNavigationRow(
+                    "settings.notRecommend.title",
+                    systemImage: "hand.thumbsdown"
+                ) {
+                    NotRecommendSettingsView()
+                }
+            }
+        }
+    }
 
     @ViewBuilder
     private var incognitoSection: some View {

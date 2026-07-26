@@ -160,6 +160,13 @@ struct VideoContextMenuContent: View {
     private let snapshotDownload: Download?
     /// Snapshotted state indicating if queue has items (video playing or queued).
     private let hasQueueItems: Bool
+    /// Snapshotted availability of the fork's don't-recommend list. (norecommend)
+    private let notRecommendAvailable: Bool
+    /// Whether the author ID is a real UCID the server would accept.
+    private let canNotRecommendChannel: Bool
+    /// Snapshotted blocked state for this video and its channel. (norecommend)
+    private let isVideoNotRecommended: Bool
+    private let isChannelNotRecommended: Bool
 
     // MARK: - Init
 
@@ -196,6 +203,18 @@ struct VideoContextMenuContent: View {
         // Queue actions only make sense when there's already a video playing or queued
         let playerState = appEnvironment?.playerService.state
         self.hasQueueItems = playerState?.currentVideo != nil || playerState?.hasNext == true
+
+        // FORK (norecommend): hidden entirely unless signed into a fork
+        // instance, rather than shown and failing.
+        let notRecommend = appEnvironment?.notRecommendService
+        // Both IDs are format-checked: the server rejects anything that isn't
+        // a real video ID / UCID, so an action on e.g. a PeerTube or local
+        // item would silently no-op if offered.
+        self.notRecommendAvailable = (notRecommend?.isAvailable ?? false)
+            && (notRecommend?.canBlock(videoID: video.id.videoID) ?? false)
+        self.canNotRecommendChannel = notRecommend?.canBlock(channelID: video.author.id) ?? false
+        self.isVideoNotRecommended = notRecommend?.videos.contains(video.id.videoID) ?? false
+        self.isChannelNotRecommended = notRecommend?.channels.contains(video.author.id) ?? false
     }
 
     // MARK: - Computed Properties (context-based, not observable)
@@ -228,6 +247,17 @@ struct VideoContextMenuContent: View {
     /// Whether to show queue actions based on context, settings, and queue state
     private var showQueueActions: Bool {
         context != .player && queueEnabled && hasQueueItems
+    }
+
+    /// Whether to offer the fork's don't-recommend actions. Needs a signed-in
+    /// fork instance and a real YouTube video — local files and media-browser
+    /// entries have no video ID the server would accept. (norecommend)
+    private var showNotRecommendActions: Bool {
+        notRecommendAvailable
+            && !video.isFromLocalFolder
+            && context != .mediaBrowser
+            && context != .downloads
+            && !video.id.videoID.isEmpty
     }
 
     /// Computed at render time to always show current watch state
@@ -434,6 +464,47 @@ struct VideoContextMenuContent: View {
                 showingPlaylistSheet = true
             } label: {
                 Label(String(localized: "video.context.addToPlaylist"), systemImage: "text.badge.plus")
+            }
+        }
+
+        // FORK (norecommend): don't recommend this video / channel
+        if showNotRecommendActions {
+            Divider()
+
+            Button {
+                let videoID = video.id.videoID
+                Task {
+                    if isVideoNotRecommended {
+                        await appEnvironment?.notRecommendService.unblockVideo(videoID)
+                    } else {
+                        await appEnvironment?.notRecommendService.blockVideo(videoID)
+                    }
+                }
+            } label: {
+                if isVideoNotRecommended {
+                    Label(String(localized: "video.context.recommendVideo"), systemImage: "hand.thumbsup")
+                } else {
+                    Label(String(localized: "video.context.notRecommendVideo"), systemImage: "hand.thumbsdown")
+                }
+            }
+
+            if video.author.hasRealChannelInfo, canNotRecommendChannel {
+                Button {
+                    let channelID = video.author.id
+                    Task {
+                        if isChannelNotRecommended {
+                            await appEnvironment?.notRecommendService.unblockChannel(channelID)
+                        } else {
+                            await appEnvironment?.notRecommendService.blockChannel(channelID)
+                        }
+                    }
+                } label: {
+                    if isChannelNotRecommended {
+                        Label(String(localized: "video.context.recommendChannel"), systemImage: "person.badge.plus")
+                    } else {
+                        Label(String(localized: "video.context.notRecommendChannel"), systemImage: "person.badge.minus")
+                    }
+                }
             }
         }
     }

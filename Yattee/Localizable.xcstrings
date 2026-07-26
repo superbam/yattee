@@ -12371,6 +12371,123 @@
         }
       }
     },
+    "settings.notRecommend.allowAgain" : {
+      "comment" : "Button removing an entry from the don't-recommend list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow"
+          }
+        }
+      }
+    },
+    "settings.notRecommend.channels.header" : {
+      "comment" : "Section header listing blocked channels",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Channels"
+          }
+        }
+      }
+    },
+    "settings.notRecommend.clearAll" : {
+      "comment" : "Button clearing the entire don't-recommend list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear All"
+          }
+        }
+      }
+    },
+    "settings.notRecommend.clearAll.confirm.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Everything on this list will start being recommended again. This cannot be undone."
+          }
+        }
+      }
+    },
+    "settings.notRecommend.clearAll.confirm.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Don't Recommend List?"
+          }
+        }
+      }
+    },
+    "settings.notRecommend.clearAll.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empties the list for this account on all your devices."
+          }
+        }
+      }
+    },
+    "settings.notRecommend.empty" : {
+      "comment" : "Shown when the don't-recommend list has no entries",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing hidden yet"
+          }
+        }
+      }
+    },
+    "settings.notRecommend.empty.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use \"Don't Recommend This Video\" or \"Don't Recommend This Channel\" from any video's context menu to hide it from recommendations."
+          }
+        }
+      }
+    },
+    "settings.notRecommend.footer" : {
+      "comment" : "Footer for the don't-recommend row in Privacy settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Videos and channels you've hidden from recommendations. Stored on your Invidious account, so it applies on all your devices. Your subscriptions are not affected."
+          }
+        }
+      }
+    },
+    "settings.notRecommend.title" : {
+      "comment" : "Title of the don't-recommend management screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Don't Recommend"
+          }
+        }
+      }
+    },
+    "settings.notRecommend.videos.header" : {
+      "comment" : "Section header listing blocked videos",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Videos"
+          }
+        }
+      }
+    },
     "settings.notifications.defaultForNew" : {
       "comment" : "Toggle for enabling notifications on new subscriptions",
       "localizations" : {
@@ -18173,6 +18290,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Move to %@"
+          }
+        }
+      }
+    },
+    "video.context.notRecommendChannel" : {
+      "comment" : "Context menu item adding a channel to the Invidious account's don't-recommend list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Don't Recommend This Channel"
+          }
+        }
+      }
+    },
+    "video.context.notRecommendVideo" : {
+      "comment" : "Context menu item adding a video to the Invidious account's don't-recommend list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Don't Recommend This Video"
+          }
+        }
+      }
+    },
+    "video.context.recommendChannel" : {
+      "comment" : "Context menu item removing a channel from the don't-recommend list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recommend This Channel Again"
+          }
+        }
+      }
+    },
+    "video.context.recommendVideo" : {
+      "comment" : "Context menu item removing a video from the don't-recommend list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recommend This Video Again"
           }
         }
       }

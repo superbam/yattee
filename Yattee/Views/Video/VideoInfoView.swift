@@ -1786,12 +1786,16 @@ struct VideoInfoView: View {
 
     // MARK: - Related Videos Section
 
-    private func relatedVideosSection(_ videos: [Video]) -> some View {
+    private func relatedVideosSection(_ unfilteredVideos: [Video]) -> some View {
         #if os(tvOS)
         let rowSpacing: CGFloat = 32
         #else
         let rowSpacing: CGFloat = 12
         #endif
+        // FORK (norecommend): the server already strips these when the
+        // request carries the session cookie; filtering again on render
+        // makes a just-blocked item vanish without reloading the video.
+        let videos = appEnvironment?.notRecommendService.filtered(unfilteredVideos) ?? unfilteredVideos
         return CollapsibleSection(title: String(localized: "videoInfo.section.relatedVideos"), isExpanded: $isRelatedExpanded) {
             LazyVStack(spacing: rowSpacing) {
                 ForEach(Array(videos.enumerated()), id: \.element.id) { index, relatedVideo in

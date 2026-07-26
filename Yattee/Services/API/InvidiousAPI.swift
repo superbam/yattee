@@ -587,6 +587,73 @@ actor InvidiousAPI: InstanceAPI {
         )
     }
 
+    // MARK: - Don't Recommend List
+    //
+    // FORK (norecommend): a per-account block list for videos and channels.
+    // The server excludes these from the Discover feed and from
+    // `recommendedVideos` on video detail; surfaces it can't filter
+    // per-user (search, channel tabs, trending) are the client's job.
+    //
+    // All mutations are idempotent and return 204 with an empty body —
+    // blocking something already blocked is a success, so callers don't
+    // need to check first or serialize rapid taps.
+
+    /// Fetches the account's blocked video IDs and channel UCIDs.
+    func notRecommended(instance: Instance, sid: String) async throws -> NotRecommendedList {
+        let endpoint = GenericEndpoint.get("/api/v1/auth/norecommend")
+        return try await httpClient.fetch(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
+
+    /// Clears the entire list in one call.
+    func clearNotRecommended(instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint.delete("/api/v1/auth/norecommend")
+        try await httpClient.sendRequest(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
+
+    func notRecommendVideo(videoID: String, instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint.post("/api/v1/auth/norecommend/videos/\(videoID)")
+        try await httpClient.sendRequest(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
+
+    func recommendVideo(videoID: String, instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint.delete("/api/v1/auth/norecommend/videos/\(videoID)")
+        try await httpClient.sendRequest(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
+
+    func notRecommendChannel(channelID: String, instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint.post("/api/v1/auth/norecommend/channels/\(channelID)")
+        try await httpClient.sendRequest(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
+
+    func recommendChannel(channelID: String, instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint.delete("/api/v1/auth/norecommend/channels/\(channelID)")
+        try await httpClient.sendRequest(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: ["Cookie": "SID=\(sid)"]
+        )
+    }
+
     // MARK: - Watch History & Playback Position Sync
     //
     // FORK (playback-sync): kept in this file because httpClient is file-private
@@ -783,6 +850,32 @@ struct InvidiousFeedResponse: Sendable {
 /// Response from the fork-only `/api/v1/health` endpoint.
 struct InvidiousHealthStatus: Decodable, Sendable {
     let youtubeAccessDegraded: Bool
+}
+
+/// The account's "don't recommend" list from the fork-only
+/// `/api/v1/auth/norecommend` endpoint: plain video IDs and channel UCIDs.
+struct NotRecommendedList: Decodable, Sendable {
+    let videos: [String]
+    let channels: [String]
+
+    static let empty = NotRecommendedList(videos: [], channels: [])
+
+    private enum CodingKeys: String, CodingKey {
+        case videos, channels
+    }
+
+    init(videos: [String], channels: [String]) {
+        self.videos = videos
+        self.channels = channels
+    }
+
+    // Tolerate either array being absent rather than failing the whole
+    // decode — an empty list is the meaningful fallback here.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        videos = try container.decodeIfPresent([String].self, forKey: .videos) ?? []
+        channels = try container.decodeIfPresent([String].self, forKey: .channels) ?? []
+    }
 }
 
 /// Subscription from Invidious auth API.

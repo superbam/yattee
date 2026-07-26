@@ -200,7 +200,12 @@ extension ExpandedPlayerSheet {
     @ViewBuilder
     var endedOverlay: some View {
         let showCountdown = isAutoPlayEnabled && nextQueuedVideo != nil && !isAutoplayCancelled && autoplayCountdown > 0
-        let relatedVideos = playerState?.currentVideo?.relatedVideos
+        // FORK (norecommend): don't offer blocked videos as the next thing
+        // to watch. Nil stays nil so the "no recommendations" branch below
+        // still applies when everything got filtered out.
+        let relatedVideos = playerState?.currentVideo?.relatedVideos.map {
+            appEnvironment?.notRecommendService.filtered($0) ?? $0
+        }
 
         Color.black.opacity(0.4)
 

@@ -643,7 +643,17 @@ struct InstanceBrowseView: View {
                 return !entry.isFinished
             }
         }
-        
+
+        // FORK (norecommend): drop blocked items from the recommendation
+        // surfaces the server can't filter per-user. Feed is left alone —
+        // blocking a channel isn't unsubscribing, so an explicit
+        // subscription still shows. Discover is already filtered server-side;
+        // filtering again here is harmless and keeps newly blocked items
+        // disappearing without a refetch.
+        if selectedTab != .feed {
+            videos = appEnvironment?.notRecommendService.filtered(videos) ?? videos
+        }
+
         return videos
     }
 
