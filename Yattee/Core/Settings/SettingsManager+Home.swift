@@ -1039,6 +1039,25 @@ extension SettingsManager {
         }
     }
 
+    /// Which tab of `tabBarStartupInstanceID`'s browse screen to open on.
+    /// `nil` lets the browse screen pick its own default (Feed when logged
+    /// in, otherwise Popular).
+    var tabBarStartupInstanceTab: InstanceBrowseView.BrowseTab? {
+        get {
+            if let cached = _tabBarStartupInstanceTab { return cached }
+            guard let rawValue = string(for: .tabBarStartupInstanceTab),
+                  let tab = InstanceBrowseView.BrowseTab(rawValue: rawValue) else {
+                return nil
+            }
+            _tabBarStartupInstanceTab = tab
+            return tab
+        }
+        set {
+            _tabBarStartupInstanceTab = newValue
+            set(newValue?.rawValue ?? "", for: .tabBarStartupInstanceTab)
+        }
+    }
+
     /// The startup tab for sidebar mode (iPad/Mac/tvOS). Default is home.
     var sidebarStartupTab: SidebarMainItem {
         get {
@@ -1069,6 +1088,25 @@ extension SettingsManager {
         set {
             _sidebarStartupInstanceID = newValue
             set(newValue?.uuidString ?? "", for: .sidebarStartupInstanceID)
+        }
+    }
+
+    /// Which tab of `sidebarStartupInstanceID`'s browse screen to open on.
+    /// `nil` lets the browse screen pick its own default (Feed when logged
+    /// in, otherwise Popular).
+    var sidebarStartupInstanceTab: InstanceBrowseView.BrowseTab? {
+        get {
+            if let cached = _sidebarStartupInstanceTab { return cached }
+            guard let rawValue = string(for: .sidebarStartupInstanceTab),
+                  let tab = InstanceBrowseView.BrowseTab(rawValue: rawValue) else {
+                return nil
+            }
+            _sidebarStartupInstanceTab = tab
+            return tab
+        }
+        set {
+            _sidebarStartupInstanceTab = newValue
+            set(newValue?.rawValue ?? "", for: .sidebarStartupInstanceTab)
         }
     }
 

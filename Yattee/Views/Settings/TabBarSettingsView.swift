@@ -30,7 +30,20 @@ struct TabBarSettingsView: View {
     private var startupInstanceBinding: Binding<UUID?> {
         Binding(
             get: { settingsManager?.tabBarStartupInstanceID },
-            set: { settingsManager?.tabBarStartupInstanceID = $0 }
+            set: { newValue in
+                // Available tabs differ per instance (login state, backend
+                // capabilities), so a tab picked for the old instance may not
+                // exist on the new one — fall back to its default.
+                settingsManager?.tabBarStartupInstanceID = newValue
+                settingsManager?.tabBarStartupInstanceTab = nil
+            }
+        )
+    }
+
+    private var startupInstanceTabBinding: Binding<InstanceBrowseView.BrowseTab?> {
+        Binding(
+            get: { settingsManager?.tabBarStartupInstanceTab },
+            set: { settingsManager?.tabBarStartupInstanceTab = $0 }
         )
     }
 
@@ -38,6 +51,18 @@ struct TabBarSettingsView: View {
     /// direct startup screen, bypassing the Sources list.
     private var availableStartupInstances: [Instance] {
         appEnvironment?.instancesManager.instances.filter { $0.isEnabled } ?? []
+    }
+
+    /// The instance currently chosen as the startup screen, if any.
+    private var selectedStartupInstance: Instance? {
+        guard let id = settingsManager?.tabBarStartupInstanceID else { return nil }
+        return availableStartupInstances.first { $0.id == id }
+    }
+
+    /// Tabs offered for the chosen startup instance.
+    private func startupInstanceTabs(for instance: Instance) -> [InstanceBrowseView.BrowseTab] {
+        let isLoggedIn = appEnvironment?.credentialsManager(for: instance)?.isLoggedIn(for: instance) ?? false
+        return InstanceBrowseView.BrowseTab.available(for: instance, isLoggedIn: isLoggedIn)
     }
 
     /// Valid startup tabs based on current visibility settings.
@@ -88,6 +113,15 @@ struct TabBarSettingsView: View {
                     Text(String(localized: "settings.tabBar.startup.source.list")).tag(UUID?.none)
                     ForEach(availableStartupInstances) { instance in
                         Text(instance.displayName).tag(Optional(instance.id))
+                    }
+                }
+                if let instance = selectedStartupInstance {
+                    Picker(String(localized: "settings.startup.source.screen"), selection: startupInstanceTabBinding) {
+                        Text(String(localized: "settings.startup.source.screen.default"))
+                            .tag(InstanceBrowseView.BrowseTab?.none)
+                        ForEach(startupInstanceTabs(for: instance)) { tab in
+                            Text(tab.title).tag(Optional(tab))
+                        }
                     }
                 }
             }
@@ -142,6 +176,7 @@ struct TabBarSettingsView: View {
                    settings.tabBarStartupTab == mainItem {
                     settings.tabBarStartupTab = .home
                     settings.tabBarStartupInstanceID = nil
+                    settings.tabBarStartupInstanceTab = nil
                 }
             }
         )

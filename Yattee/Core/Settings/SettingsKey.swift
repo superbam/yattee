@@ -91,6 +91,8 @@ enum SettingsKey: String, CaseIterable {
     // Specific instance to open directly to when tabBarStartupTab is .sources
     // (e.g. an Invidious instance's Feed/Popular/Trending/Discover screen).
     case tabBarStartupInstanceID
+    // Which tab of that instance's browse screen to open on.
+    case tabBarStartupInstanceTab
 
     // Sidebar
     case sidebarMainItemOrder
@@ -98,6 +100,8 @@ enum SettingsKey: String, CaseIterable {
     case sidebarStartupTab
     // Specific instance to open directly to when sidebarStartupTab is .sources.
     case sidebarStartupInstanceID
+    // Which tab of that instance's browse screen to open on.
+    case sidebarStartupInstanceTab
 
     // tvOS: dedicated shortcut for making Subscriptions the launch tab.
     // Not local-only, so the toggle itself follows the account via iCloud;
@@ -176,8 +180,10 @@ enum SettingsKey: String, CaseIterable {
              .topShelfSections,
              // Tab bar (compact size class) layout
              .tabBarItemOrder, .tabBarItemVisibility, .tabBarStartupTab, .tabBarStartupInstanceID,
+             .tabBarStartupInstanceTab,
              // Sidebar layout/selection
              .sidebarMainItemOrder, .sidebarMainItemVisibility, .sidebarStartupTab, .sidebarStartupInstanceID,
+             .sidebarStartupInstanceTab,
              .tvOSOpenToSubscriptionsAtLaunch, .tvOSStartupTabBeforeSubscriptionsDefault,
              .sidebarSourcesEnabled, .sidebarSourceSort, .sidebarSourcesLimitEnabled, .sidebarMaxSources,
              .sidebarChannelsEnabled, .sidebarMaxChannels, .sidebarChannelSort, .sidebarChannelsLimitEnabled,

@@ -120,6 +120,25 @@ struct InstanceBrowseView: View {
             case .discover: return "sparkles"
             }
         }
+
+        /// Tabs this instance can actually show, given its backend
+        /// capabilities and whether the user is logged in. Shared with the
+        /// startup-screen settings pickers so the offered tabs can't drift
+        /// from the ones the browse screen renders.
+        static func available(for instance: Instance, isLoggedIn: Bool) -> [BrowseTab] {
+            var tabs: [BrowseTab]
+            if instance.supportsFeed && isLoggedIn {
+                // Playlists tab only available for Invidious (Piped playlists to be added in future)
+                tabs = instance.type == .invidious ? [.feed, .popular, .trending, .playlists] : [.feed, .popular, .trending]
+            } else {
+                tabs = [.popular, .trending]
+            }
+            // Discover requires being logged in and a confirmed shorts-filter fork instance.
+            if isLoggedIn && instance.supportsDiscover {
+                tabs.append(.discover)
+            }
+            return tabs
+        }
     }
 
     private var viewOptionsSheetContent: some View {
@@ -604,18 +623,7 @@ struct InstanceBrowseView: View {
     }
 
     private var availableTabs: [BrowseTab] {
-        var tabs: [BrowseTab]
-        if instance.supportsFeed && isLoggedIn {
-            // Playlists tab only available for Invidious (Piped playlists to be added in future)
-            tabs = instance.type == .invidious ? [.feed, .popular, .trending, .playlists] : [.feed, .popular, .trending]
-        } else {
-            tabs = [.popular, .trending]
-        }
-        // Discover requires being logged in and a confirmed shorts-filter fork instance.
-        if isLoggedIn && instance.supportsDiscover {
-            tabs.append(.discover)
-        }
-        return tabs
+        BrowseTab.available(for: instance, isLoggedIn: isLoggedIn)
     }
 
     private var currentVideos: [Video] {

@@ -118,7 +118,20 @@ struct SidebarSettingsView: View {
     private var startupInstanceBinding: Binding<UUID?> {
         Binding(
             get: { settingsManager?.sidebarStartupInstanceID },
-            set: { settingsManager?.sidebarStartupInstanceID = $0 }
+            set: { newValue in
+                // Available tabs differ per instance (login state, backend
+                // capabilities), so a tab picked for the old instance may not
+                // exist on the new one — fall back to its default.
+                settingsManager?.sidebarStartupInstanceID = newValue
+                settingsManager?.sidebarStartupInstanceTab = nil
+            }
+        )
+    }
+
+    private var startupInstanceTabBinding: Binding<InstanceBrowseView.BrowseTab?> {
+        Binding(
+            get: { settingsManager?.sidebarStartupInstanceTab },
+            set: { settingsManager?.sidebarStartupInstanceTab = $0 }
         )
     }
 
@@ -126,6 +139,18 @@ struct SidebarSettingsView: View {
     /// direct startup screen, bypassing the Sources list.
     private var availableStartupInstances: [Instance] {
         appEnvironment?.instancesManager.instances.filter { $0.isEnabled } ?? []
+    }
+
+    /// The instance currently chosen as the startup screen, if any.
+    private var selectedStartupInstance: Instance? {
+        guard let id = settingsManager?.sidebarStartupInstanceID else { return nil }
+        return availableStartupInstances.first { $0.id == id }
+    }
+
+    /// Tabs offered for the chosen startup instance.
+    private func startupInstanceTabs(for instance: Instance) -> [InstanceBrowseView.BrowseTab] {
+        let isLoggedIn = appEnvironment?.credentialsManager(for: instance)?.isLoggedIn(for: instance) ?? false
+        return InstanceBrowseView.BrowseTab.available(for: instance, isLoggedIn: isLoggedIn)
     }
 
     /// Valid startup tabs based on current visibility settings.
@@ -187,6 +212,15 @@ struct SidebarSettingsView: View {
                     Text(String(localized: "settings.sidebar.startup.source.list")).tag(UUID?.none)
                     ForEach(availableStartupInstances) { instance in
                         Text(instance.displayName).tag(Optional(instance.id))
+                    }
+                }
+                if let instance = selectedStartupInstance {
+                    PlatformMenuPicker(String(localized: "settings.startup.source.screen"), selection: startupInstanceTabBinding) {
+                        Text(String(localized: "settings.startup.source.screen.default"))
+                            .tag(InstanceBrowseView.BrowseTab?.none)
+                        ForEach(startupInstanceTabs(for: instance)) { tab in
+                            Text(tab.title).tag(Optional(tab))
+                        }
                     }
                 }
             }
@@ -290,6 +324,7 @@ struct SidebarSettingsView: View {
                 if !newValue, settingsManager?.sidebarStartupTab == item {
                     settingsManager?.sidebarStartupTab = .home
                     settingsManager?.sidebarStartupInstanceID = nil
+                    settingsManager?.sidebarStartupInstanceTab = nil
                 }
             }
         )

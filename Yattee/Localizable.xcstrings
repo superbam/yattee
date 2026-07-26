@@ -14599,6 +14599,28 @@
         }
       }
     },
+    "settings.startup.source.screen" : {
+      "comment" : "Label for the picker choosing which tab of the startup source's browse screen to open",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen"
+          }
+        }
+      }
+    },
+    "settings.startup.source.screen.default" : {
+      "comment" : "Option letting the source's browse screen pick its own default tab",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatic"
+          }
+        }
+      }
+    },
     "settings.sponsorBlock.about.description" : {
       "localizations" : {
         "en" : {

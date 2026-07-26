@@ -101,7 +101,10 @@ struct UnifiedTabView: View {
         if startupTab == .sources,
            let instanceID = settingsManager?.sidebarStartupInstanceID,
            let instance = appEnvironment?.instancesManager.instances.first(where: { $0.id == instanceID && $0.isEnabled }) {
-            sourcesPath.append(NavigationDestination.instanceBrowse(instance))
+            sourcesPath.append(NavigationDestination.instanceBrowse(
+                instance,
+                initialTab: settingsManager?.sidebarStartupInstanceTab
+            ))
         }
     }
 
@@ -428,7 +431,10 @@ struct UnifiedTabView: View {
         if startupTab == .sources,
            let instanceID = settingsManager?.sidebarStartupInstanceID,
            let instance = appEnvironment?.instancesManager.instances.first(where: { $0.id == instanceID && $0.isEnabled }) {
-            sourcesPath.append(NavigationDestination.instanceBrowse(instance))
+            sourcesPath.append(NavigationDestination.instanceBrowse(
+                instance,
+                initialTab: settingsManager?.sidebarStartupInstanceTab
+            ))
         }
     }
 
@@ -697,7 +703,10 @@ struct UnifiedTabView: View {
         if startupTab == .sources,
            let instanceID = settingsManager?.sidebarStartupInstanceID,
            let instance = appEnvironment?.instancesManager.instances.first(where: { $0.id == instanceID && $0.isEnabled }) {
-            sourcesPath.append(NavigationDestination.instanceBrowse(instance))
+            sourcesPath.append(NavigationDestination.instanceBrowse(
+                instance,
+                initialTab: settingsManager?.sidebarStartupInstanceTab
+            ))
         }
     }
 
