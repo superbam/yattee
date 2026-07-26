@@ -43,6 +43,12 @@ final class InstancesManager {
     /// Current status of each instance, keyed by instance ID.
     private(set) var instanceStatuses: [UUID: InstanceStatus] = [:]
 
+    /// IDs of Invidious instances currently reporting degraded YouTube access
+    /// (fork-only `/api/v1/health`). Kept separate from `instanceStatuses`
+    /// since an instance can be reachable (`.online`) while YouTube access
+    /// through it is degraded — these are orthogonal, not mutually exclusive.
+    private(set) var youtubeAccessDegradedInstanceIDs: Set<UUID> = []
+
     // MARK: - Initialization
 
     init(settingsManager: SettingsManager? = nil) {
@@ -306,6 +312,20 @@ final class InstancesManager {
     /// Clears the status of an instance (resets to online).
     func clearStatus(for instance: Instance) {
         instanceStatuses.removeValue(forKey: instance.id)
+    }
+
+    /// Returns whether an instance is currently reporting degraded YouTube access.
+    func youtubeAccessDegraded(for instance: Instance) -> Bool {
+        youtubeAccessDegradedInstanceIDs.contains(instance.id)
+    }
+
+    /// Records the latest YouTube-access health for an instance.
+    func setYouTubeAccessDegraded(_ degraded: Bool, for instance: Instance) {
+        if degraded {
+            youtubeAccessDegradedInstanceIDs.insert(instance.id)
+        } else {
+            youtubeAccessDegradedInstanceIDs.remove(instance.id)
+        }
     }
 
     /// Instances that have auth issues (need attention).

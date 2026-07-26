@@ -16,6 +16,20 @@ actor InvidiousAPI: InstanceAPI {
         self.httpClient = httpClient
     }
 
+    // MARK: - Health
+
+    /// Fetches YouTube-access health for the instance.
+    /// FORK-only: `/api/v1/health` doesn't exist on stock Invidious. Unlike
+    /// the admin extraction-health banner it's derived from, this endpoint
+    /// requires no auth and is meant for clients to poll. Callers should use
+    /// `try?` and simply not update degraded state on failure (missing
+    /// endpoint on stock instances, or a transient network error) rather
+    /// than treating a failure as "healthy".
+    func health(instance: Instance) async throws -> InvidiousHealthStatus {
+        let endpoint = GenericEndpoint.get("/api/v1/health")
+        return try await httpClient.fetch(endpoint, baseURL: instance.url)
+    }
+
     // MARK: - InstanceAPI
 
     func trending(instance: Instance) async throws -> [Video] {
@@ -764,6 +778,11 @@ struct ChannelVideosPage: Sendable {
 struct InvidiousFeedResponse: Sendable {
     let videos: [Video]
     let hasMore: Bool
+}
+
+/// Response from the fork-only `/api/v1/health` endpoint.
+struct InvidiousHealthStatus: Decodable, Sendable {
+    let youtubeAccessDegraded: Bool
 }
 
 /// Subscription from Invidious auth API.

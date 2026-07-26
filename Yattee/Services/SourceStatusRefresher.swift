@@ -132,8 +132,8 @@ final class SourceStatusRefresher {
         do {
             let data = try await client(for: instance).fetchData(endpoint, baseURL: instance.url)
             instancesManager?.clearStatus(for: instance)
-            if instance.type == .invidious {
-                refreshForkDetection(for: instance, statsData: data)
+            if instance.type == .invidious, refreshForkDetection(for: instance, statsData: data) {
+                await refreshYouTubeHealth(for: instance)
             }
         } catch APIError.unauthorized {
             let hasCredentials = basicAuthCredentialsManager?.hasCredentials(for: instance) ?? false
@@ -148,13 +148,31 @@ final class SourceStatusRefresher {
     /// Keeps `Instance.isShortsFilterFork` current from the `/api/v1/stats`
     /// body already fetched for the reachability probe — no extra request.
     /// (playback-sync)
-    private func refreshForkDetection(for instance: Instance, statsData: Data) {
-        guard let stats = try? JSONDecoder().decode(InstanceDetectorModels.InvidiousStats.self, from: statsData) else { return }
+    ///
+    /// Returns whether fork-only endpoints are worth calling for this
+    /// instance: confirmed-fork, or undetectable stats (unknown, so still
+    /// worth trying) — only a confirmed non-fork returns false.
+    @discardableResult
+    private func refreshForkDetection(for instance: Instance, statsData: Data) -> Bool {
+        guard let stats = try? JSONDecoder().decode(InstanceDetectorModels.InvidiousStats.self, from: statsData) else {
+            return instance.isShortsFilterFork != false
+        }
         let isFork = stats.software?.branch == "shorts-filter"
-        guard instance.isShortsFilterFork != isFork else { return }
+        guard instance.isShortsFilterFork != isFork else { return isFork }
         var updated = instance
         updated.isShortsFilterFork = isFork
         instancesManager?.update(updated)
+        return isFork
+    }
+
+    /// Best-effort: `/api/v1/health` only exists on the shorts-filter fork,
+    /// so this is called only once fork detection says it's worth trying —
+    /// stock instances would just 404 on every sweep. A transient error
+    /// leaves the previously known state untouched rather than clearing it.
+    private func refreshYouTubeHealth(for instance: Instance) async {
+        let api = InvidiousAPI(httpClient: client(for: instance))
+        guard let health = try? await api.health(instance: instance) else { return }
+        instancesManager?.setYouTubeAccessDegraded(health.youtubeAccessDegraded, for: instance)
     }
 
     /// Cheapest known always-available endpoint per backend type.

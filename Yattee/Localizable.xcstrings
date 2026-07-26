@@ -5084,6 +5084,17 @@
         }
       }
     },
+    "instance.browse.youtubeAccessDegraded" : {
+      "comment" : "Banner shown when the instance reports degraded YouTube access",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This instance is reporting degraded YouTube access — video loading may be unreliable"
+          }
+        }
+      }
+    },
     "instance.disabled" : {
       "localizations" : {
         "en" : {
@@ -16820,6 +16831,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Offline"
+          }
+        }
+      }
+    },
+    "sources.status.youtubeAccessDegraded" : {
+      "comment" : "Status when the instance reports degraded YouTube access",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YouTube Access Degraded"
           }
         }
       }

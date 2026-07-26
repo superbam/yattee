@@ -187,6 +187,8 @@ struct InstanceBrowseView: View {
                         Spacer()
                             .frame(height: 20)
 
+                        youtubeAccessDegradedBanner
+
                         // Tab picker (hidden during search)
                         if !isInSearchMode {
                             tabPicker
@@ -261,6 +263,8 @@ struct InstanceBrowseView: View {
                 .overlay(
                     ScrollView {
                         VStack(spacing: 0) {
+                            youtubeAccessDegradedBanner
+
                             // Tab picker (hidden during search; lives in the toolbar on macOS)
                             #if !os(macOS)
                             if !isInSearchMode {
@@ -451,6 +455,9 @@ struct InstanceBrowseView: View {
         .task {
             await runAutoRefreshLoop()
         }
+        .task {
+            await refreshYouTubeHealth()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .watchHistoryDidChange)) { _ in
             loadWatchEntries()
         }
@@ -558,6 +565,27 @@ struct InstanceBrowseView: View {
         }
     }
     #endif
+
+    /// Warning shown when the instance's `/api/v1/health` reports degraded
+    /// YouTube access. Instance-level (not tab-scoped), so it stays visible
+    /// across Popular/Trending/Feed/Discover rather than resetting per tab.
+    @ViewBuilder
+    private var youtubeAccessDegradedBanner: some View {
+        if instance.type == .invidious, appEnvironment?.instancesManager.youtubeAccessDegraded(for: instance) == true {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text(String(localized: "instance.browse.youtubeAccessDegraded"))
+                    .font(.caption)
+            }
+            .foregroundStyle(.orange)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            #if os(tvOS)
+            .background(Color.black.opacity(0.3))
+            #endif
+        }
+    }
 
     private var tabPicker: some View {
         Picker("", selection: $selectedTab) {
@@ -1249,9 +1277,23 @@ struct InstanceBrowseView: View {
         while !Task.isCancelled {
             try? await Task.sleep(for: Self.autoRefreshInterval)
             guard !Task.isCancelled else { break }
+            await refreshYouTubeHealth()
             guard !isInSearchMode, selectedTab == .popular || selectedTab == .trending else { continue }
             await startContentLoad(forceRefresh: true)
         }
+    }
+
+    /// Best-effort: `/api/v1/health` only exists on the shorts-filter fork,
+    /// so this skips instances already confirmed to be stock rather than
+    /// 404ing on every check. A transient error leaves the previously known
+    /// degraded state untouched (self-heals on the next successful check)
+    /// rather than clearing a real warning.
+    private func refreshYouTubeHealth() async {
+        guard instance.type == .invidious, instance.isShortsFilterFork != false else { return }
+        guard let appEnvironment else { return }
+        let api = InvidiousAPI(httpClient: appEnvironment.httpClient)
+        guard let health = try? await api.health(instance: instance) else { return }
+        appEnvironment.instancesManager.setYouTubeAccessDegraded(health.youtubeAccessDegraded, for: instance)
     }
 
     private func performLoadContent(forceRefresh: Bool = false) async {

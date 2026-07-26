@@ -32,6 +32,12 @@ struct SourceRow: View {
         return status == .authFailed || status == .authRequired
     }
 
+    /// Whether this Invidious instance is reporting degraded YouTube access.
+    private var youtubeAccessDegraded: Bool {
+        guard case .remoteServer(let instance) = source, instance.type == .invidious else { return false }
+        return appEnvironment?.instancesManager.youtubeAccessDegraded(for: instance) ?? false
+    }
+
     var body: some View {
         #if os(tvOS)
         Button(action: onEdit) {
@@ -107,6 +113,10 @@ struct SourceRow: View {
                     .font(.caption2)
                     .foregroundStyle(.orange)
             }
+        } else if youtubeAccessDegraded {
+            Label(String(localized: "sources.status.youtubeAccessDegraded"), systemImage: "exclamationmark.triangle.fill")
+                .font(.caption2)
+                .foregroundStyle(.orange)
         }
     }
 }
