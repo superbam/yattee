@@ -13,7 +13,7 @@ on:
       build_mac_beta:
         description: 'Build macOS (TestFlight)'
         type: boolean
-        default: false
+        default: true
       build_mac_notarized:
         description: 'Build macOS (notarized Developer ID + Sparkle appcast)'
         type: boolean
@@ -49,7 +49,6 @@ env:
   GIT_AUTHORIZATION: ${{ secrets.GIT_AUTHORIZATION }}
   MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
   CERTIFICATES_GIT_URL: ${{ secrets.CERTIFICATES_GIT_URL }}
-  TESTFLIGHT_EXTERNAL_GROUPS: ${{ secrets.TESTFLIGHT_EXTERNAL_GROUPS }}
 
 jobs:
   determine_build_number:
@@ -237,7 +236,9 @@ jobs:
           fi
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: artifacts/**/*.ipa,artifacts/**/*.zip,artifacts/**/*.pkg,artifacts/**/*.dmg
+          # No .pkg here on purpose: the mac TestFlight pkg is App Store-signed
+          # (no Sparkle, not notarized) and would not run if installed directly.
+          artifacts: artifacts/**/*.ipa,artifacts/**/*.zip,artifacts/**/*.dmg
           commit: ${{ github.ref_name }}
           tag: ${{ steps.compute_tag.outputs.tag }}
           prerelease: ${{ steps.compute_tag.outputs.prerelease }}
@@ -289,9 +290,12 @@ jobs:
           echo "sign_update=$SIGN" >> "$GITHUB_OUTPUT"
       - name: Checkout gh-pages (create if missing)
         run: |
-          git fetch origin gh-pages || true
-          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
-            git worktree add gh-pages origin/gh-pages
+          # Fetch into a local branch: actions/checkout configures a narrow
+          # refspec, so a plain `git fetch origin gh-pages` never creates
+          # origin/gh-pages, and a detached worktree has no local branch for
+          # `git push origin gh-pages` to resolve.
+          if git fetch origin +refs/heads/gh-pages:refs/heads/gh-pages; then
+            git worktree add gh-pages gh-pages
           else
             # First run — create orphan gh-pages with only appcast scaffolding.
             git worktree add --detach gh-pages HEAD
@@ -341,7 +345,13 @@ jobs:
           fi
 
   update_altstore:
+    # Only when an iOS IPA was actually built and released — a mac/tvOS-only
+    # release has no IPA and would corrupt the AltStore source.
+    if: ${{ inputs.build_ios && success() }}
     needs: [release]
     permissions:
       contents: write
     uses: ./.github/workflows/update-altstore.yml
+    secrets: inherit
+    with:
+      tag: ${{ needs.release.outputs.tag }}

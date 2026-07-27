@@ -538,9 +538,9 @@ final class MPVBackend: PlayerBackend {
 
             LoggingService.shared.logMPV("MPV stream loaded successfully")
         } catch is CancellationError {
-            // Re-throw cancellation errors without retry
-            // Only reset isInitialLoading if we're still the active load operation
-            // A newer load may have already set isInitialLoading=true
+            // Re-throw cancellation errors without retry.
+            // Only reset isInitialLoading if we're still the active load operation.
+            LoggingService.shared.debug("MPV: loadWithRetry cancelled", category: .mpv)
             if currentLoadingID == loadingID {
                 isInitialLoading = false
             }
@@ -2069,6 +2069,15 @@ extension MPVBackend: MPVClientDelegate {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
                 guard let self, !Task.isCancelled, let client = self.mpvClient else { return }
+
+                #if !os(macOS)
+                // Only macOS needs the property fetch every tick (render
+                // watchdog below). Elsewhere the batched mpv_get_property
+                // calls contend with the playback core and caused a visible
+                // stutter every 10s on tvOS, so skip the fetch entirely
+                // unless verbose logging wants the stats line.
+                guard MPVLogging.verboseEnabled else { continue }
+                #endif
 
                 let props = await client.getDebugPropertiesAsync()
 

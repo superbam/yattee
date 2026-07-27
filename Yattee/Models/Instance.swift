@@ -86,6 +86,16 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
     /// disabling sync for existing users. (playback-sync)
     var isShortsFilterFork: Bool?
 
+    /// Whether this instance sits behind an HTTP Basic Auth reverse proxy.
+    /// Set when basic auth credentials are stored, so a missing Keychain entry
+    /// (e.g. after reinstalling and importing sources from iCloud) can be detected.
+    /// Yattee Server always requires basic auth regardless of this flag.
+    var usesBasicAuth: Bool
+
+    /// Whether the user has logged into an account on this instance (Invidious/Piped).
+    /// Set on login, so a missing Keychain credential can be detected after reinstall.
+    var usesAccountLogin: Bool
+
     // MARK: - Initialization
 
     init(
@@ -98,7 +108,9 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         apiKey: String? = nil,
         allowInvalidCertificates: Bool = false,
         proxiesVideos: Bool = false,
-        isShortsFilterFork: Bool? = nil
+        isShortsFilterFork: Bool? = nil,
+        usesBasicAuth: Bool = false,
+        usesAccountLogin: Bool = false
     ) {
         self.id = id
         self.type = type
@@ -110,6 +122,8 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         self.allowInvalidCertificates = allowInvalidCertificates
         self.proxiesVideos = proxiesVideos
         self.isShortsFilterFork = isShortsFilterFork
+        self.usesBasicAuth = usesBasicAuth
+        self.usesAccountLogin = usesAccountLogin
     }
 
     init(from decoder: Decoder) throws {
@@ -124,6 +138,8 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         allowInvalidCertificates = try container.decode(Bool.self, forKey: .allowInvalidCertificates)
         proxiesVideos = try container.decodeIfPresent(Bool.self, forKey: .proxiesVideos) ?? false
         isShortsFilterFork = try container.decodeIfPresent(Bool.self, forKey: .isShortsFilterFork)
+        usesBasicAuth = try container.decodeIfPresent(Bool.self, forKey: .usesBasicAuth) ?? false
+        usesAccountLogin = try container.decodeIfPresent(Bool.self, forKey: .usesAccountLogin) ?? false
     }
 
     // MARK: - Computed Properties

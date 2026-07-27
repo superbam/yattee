@@ -10,7 +10,6 @@ TEMP_KEYCHAIN_USER = ENV['TEMP_KEYCHAIN_USER']
 TEMP_KEYCHAIN_PASSWORD = ENV['TEMP_KEYCHAIN_PASSWORD']
 DEVELOPER_APP_IDENTIFIER = ENV['DEVELOPER_APP_IDENTIFIER']
 GIT_AUTHORIZATION = ENV['GIT_AUTHORIZATION']
-TESTFLIGHT_EXTERNAL_GROUPS = ENV['TESTFLIGHT_EXTERNAL_GROUPS']
 
 XCODEPROJ = "#{APP_NAME}.xcodeproj"
 SCHEME = APP_NAME
@@ -33,6 +32,20 @@ end
 def ensure_temp_keychain(name, password)
   delete_temp_keychain(name)
   create_temp_keychain(name, password)
+end
+
+# Beta groups are managed in App Store Connect; fetching them at upload time
+# means new groups get builds without touching CI config.
+def all_testflight_group_names(api_key)
+  Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.from(hash: api_key)
+  app = Spaceship::ConnectAPI::App.find(DEVELOPER_APP_IDENTIFIER)
+  UI.user_error!("App #{DEVELOPER_APP_IDENTIFIER} not found on App Store Connect") if app.nil?
+  # Internal groups can't be assigned builds via the API (ASC rejects it);
+  # they get access to new builds automatically anyway.
+  groups = app.get_beta_groups.reject(&:is_internal_group).map(&:name)
+  UI.user_error!("No TestFlight beta groups found for #{DEVELOPER_APP_IDENTIFIER}") if groups.empty?
+  UI.message("Distributing build to TestFlight groups: #{groups.join(', ')}")
+  groups
 end
 
 add_extra_platforms(platforms: [:tvos])
@@ -148,7 +161,9 @@ platform :ios do
     upload_to_testflight(
       api_key: api_key,
       ipa: lane_context[SharedValues::IPA_OUTPUT_PATH],
-      changelog: changelog
+      changelog: changelog,
+      distribute_external: true,
+      groups: all_testflight_group_names(api_key)
     )
   end
 end
@@ -220,7 +235,9 @@ platform :tvos do
     upload_to_testflight(
       api_key: api_key,
       ipa: lane_context[SharedValues::IPA_OUTPUT_PATH],
-      changelog: changelog
+      changelog: changelog,
+      distribute_external: true,
+      groups: all_testflight_group_names(api_key)
     )
   end
 end
@@ -284,7 +301,9 @@ platform :mac do
     upload_to_testflight(
       api_key: api_key,
       pkg: lane_context[SharedValues::PKG_OUTPUT_PATH],
-      changelog: changelog
+      changelog: changelog,
+      distribute_external: true,
+      groups: all_testflight_group_names(api_key)
     )
   end
 
@@ -328,6 +347,8 @@ platform :mac do
 
     build_mac_app(
       scheme: SCHEME,
+      sdk: "macosx",
+      destination: "generic/platform=macOS",
       configuration: "Release-DeveloperID",
       output_directory: "fastlane/builds/#{version}-#{build}/macOS",
       output_name: APP_NAME,
@@ -348,10 +369,12 @@ platform :mac do
 
     # Staple the notarization ticket so Gatekeeper doesn't need to phone home
     # when the user first launches from Sparkle/DMG.
-    sh "xcrun stapler staple 'fastlane/builds/#{version}-#{build}/macOS/#{APP_NAME}.app'"
+    # NOTE: sh runs from the fastlane/ directory, so paths here are relative
+    # to it (no fastlane/ prefix), unlike action arguments above.
+    sh "xcrun stapler staple 'builds/#{version}-#{build}/macOS/#{APP_NAME}.app'"
 
     # Package the stapled .app into a .zip (Sparkle) and .dmg (Homebrew / direct).
-    dir = "fastlane/builds/#{version}-#{build}/macOS"
+    dir = "builds/#{version}-#{build}/macOS"
     app = "#{dir}/#{APP_NAME}.app"
     zip = "#{dir}/#{APP_NAME}-#{version}-macOS.zip"
     dmg = "#{dir}/#{APP_NAME}-#{version}-macOS.dmg"

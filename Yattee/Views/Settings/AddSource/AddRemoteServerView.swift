@@ -771,7 +771,8 @@ struct AddRemoteServerView: View {
                             type: type,
                             url: url,
                             name: name.isEmpty ? nil : name,
-                            allowInvalidCertificates: allowInvalidCertificates
+                            allowInvalidCertificates: allowInvalidCertificates,
+                            usesBasicAuth: true
                         )
 
                         appEnvironment.basicAuthCredentialsManager.setCredentials(
@@ -801,15 +802,17 @@ struct AddRemoteServerView: View {
 
         // For other instance types: optionally store HTTP Basic Auth credentials
         // (used when the instance is fronted by a reverse proxy that requires basic auth).
+        let hasBasicAuth = !basicAuthUsername.isEmpty && !basicAuthPassword.isEmpty
         let instance = Instance(
             type: type,
             url: url,
             name: name.isEmpty ? nil : name,
             allowInvalidCertificates: allowInvalidCertificates,
-            isShortsFilterFork: detectionResult?.isShortsFilterFork
+            isShortsFilterFork: detectionResult?.isShortsFilterFork,
+            usesBasicAuth: hasBasicAuth
         )
 
-        if !basicAuthUsername.isEmpty, !basicAuthPassword.isEmpty {
+        if hasBasicAuth {
             appEnvironment.basicAuthCredentialsManager.setCredentials(
                 username: basicAuthUsername,
                 password: basicAuthPassword,
