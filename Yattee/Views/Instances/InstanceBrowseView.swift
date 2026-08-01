@@ -200,6 +200,14 @@ struct InstanceBrowseView: View {
                 .padding(.horizontal, 48)
                 .padding(.top, 20)
                 .padding(.bottom, 20)
+                // Opaque regardless of listStyle (backgroundStyle.color is
+                // Color.clear for .plain on tvOS): the ScrollView below has
+                // .scrollClipDisabled() so focus-scaled cards near the top
+                // edge aren't clipped, but that also lets scrolled-past rows
+                // keep rendering above the ScrollView's own bounds. Without
+                // a solid background here, that content shows through this
+                // search bar as a ghosting artifact while scrolling.
+                .background(Color.black)
                 // Content
                 ScrollView {
                     VStack(spacing: 0) {
