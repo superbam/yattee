@@ -18,6 +18,8 @@ enum SidebarMainItem: String, CaseIterable, Codable, Identifiable, Sendable {
     case channels
     case playlists
     case sources
+    case feed
+    case discover
     case settings
     case openURL
     case remoteControl
@@ -27,7 +29,7 @@ enum SidebarMainItem: String, CaseIterable, Codable, Identifiable, Sendable {
 
     /// Default order for sidebar main items.
     static var defaultOrder: [SidebarMainItem] {
-        [.search, .home, .subscriptions, .bookmarks, .history, .channels, .playlists, .sources, .openURL, .remoteControl, .downloads, .continueWatching, .settings]
+        [.search, .home, .subscriptions, .bookmarks, .history, .channels, .playlists, .sources, .feed, .discover, .openURL, .remoteControl, .downloads, .continueWatching, .settings]
     }
 
     /// Default visibility (all visible except subscriptions and channels).
@@ -43,6 +45,8 @@ enum SidebarMainItem: String, CaseIterable, Codable, Identifiable, Sendable {
             .channels: false,
             .playlists: false,
             .sources: true,
+            .feed: false,
+            .discover: false,
             .settings: true,
             .openURL: false,
             .remoteControl: true,
@@ -59,6 +63,8 @@ enum SidebarMainItem: String, CaseIterable, Codable, Identifiable, Sendable {
             .channels: false,
             .playlists: false,
             .sources: true,
+            .feed: false,
+            .discover: false,
             .settings: true,
             .openURL: false,
             .remoteControl: false,
@@ -79,6 +85,8 @@ enum SidebarMainItem: String, CaseIterable, Codable, Identifiable, Sendable {
         case .channels: "person.2"
         case .playlists: "list.bullet.rectangle"
         case .sources: "server.rack"
+        case .feed: "person.crop.rectangle.stack"
+        case .discover: "sparkles"
         case .settings: "gear"
         case .openURL: "link"
         case .remoteControl: "antenna.radiowaves.left.and.right"
@@ -98,6 +106,8 @@ enum SidebarMainItem: String, CaseIterable, Codable, Identifiable, Sendable {
         case .channels: String(localized: "sidebar.mainItem.channels")
         case .playlists: String(localized: "sidebar.mainItem.playlists")
         case .sources: String(localized: "sidebar.mainItem.sources")
+        case .feed: String(localized: "sidebar.mainItem.feed")
+        case .discover: String(localized: "sidebar.mainItem.discover")
         case .settings: String(localized: "sidebar.mainItem.settings")
         case .openURL: String(localized: "sidebar.mainItem.openURL")
         case .remoteControl: String(localized: "sidebar.mainItem.remoteControl")
@@ -150,6 +160,10 @@ enum SidebarMainItem: String, CaseIterable, Codable, Identifiable, Sendable {
         case .channels: return TabBarItem.channels.rawValue
         case .playlists: return TabBarItem.playlists.rawValue
         case .sources: return TabBarItem.sources.rawValue
+        // Feed/Discover are sidebar-only shortcuts (iPad/Mac/tvOS) — no
+        // compact tab bar equivalent, matching openURL/remoteControl below.
+        case .feed: return "feed"
+        case .discover: return "discover"
         case .settings: return TabBarItem.settings.rawValue
         case .openURL: return "open-url"
         case .remoteControl: return "remote-control"
@@ -169,6 +183,8 @@ enum SidebarMainItem: String, CaseIterable, Codable, Identifiable, Sendable {
         case .channels: return .manageChannels
         case .playlists: return .playlistsList
         case .sources: return .sources
+        case .feed: return .feed
+        case .discover: return .discover
         case .settings: return .settings
         case .openURL: return .openURL
         case .remoteControl: return .remoteControl

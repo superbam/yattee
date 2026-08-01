@@ -15560,6 +15560,17 @@
     "Shorts" : {
 
     },
+    "sidebar.directTab.signInRequired" : {
+      "comment" : "Empty state for a Feed/Discover sidebar shortcut when no signed-in instance could be resolved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to an Invidious or Piped source to use this from the sidebar. Open Sources to log in."
+          }
+        }
+      }
+    },
     "sidebar.mainItem.bookmarks" : {
       "comment" : "Sidebar main navigation item for bookmarks",
       "localizations" : {
@@ -15593,6 +15604,17 @@
         }
       }
     },
+    "sidebar.mainItem.discover" : {
+      "comment" : "Sidebar main navigation item that jumps straight to an instance's Discover tab",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discover"
+          }
+        }
+      }
+    },
     "sidebar.mainItem.downloads" : {
       "comment" : "Sidebar main navigation item for downloads",
       "localizations" : {
@@ -15600,6 +15622,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Downloads"
+          }
+        }
+      }
+    },
+    "sidebar.mainItem.feed" : {
+      "comment" : "Sidebar main navigation item that jumps straight to an instance's Feed tab",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Feed"
           }
         }
       }

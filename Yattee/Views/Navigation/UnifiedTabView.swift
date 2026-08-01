@@ -39,6 +39,8 @@ struct UnifiedTabView: View {
     @State private var openURLPath = NavigationPath()
     @State private var remoteControlPath = NavigationPath()
     @State private var continueWatchingPath = NavigationPath()
+    @State private var feedPath = NavigationPath()
+    @State private var discoverPath = NavigationPath()
 
     // Current selection - initial value is a placeholder; actual startup tab is applied in onAppear
     @State private var selection: SidebarItem = .home
@@ -216,6 +218,20 @@ struct UnifiedTabView: View {
                 Label(SidebarItem.sources.title, systemImage: SidebarItem.sources.systemImage)
             }
 
+        case .feed:
+            Tab(value: SidebarItem.feed) {
+                directTabContent(for: .feed, path: $feedPath)
+            } label: {
+                Label(SidebarItem.feed.title, systemImage: SidebarItem.feed.systemImage)
+            }
+
+        case .discover:
+            Tab(value: SidebarItem.discover) {
+                directTabContent(for: .discover, path: $discoverPath)
+            } label: {
+                Label(SidebarItem.discover.title, systemImage: SidebarItem.discover.systemImage)
+            }
+
         case .settings:
             Tab(value: SidebarItem.settings) {
                 NavigationStack(path: $settingsPath) {
@@ -380,6 +396,8 @@ struct UnifiedTabView: View {
     @State private var openURLPath = NavigationPath()
     @State private var remoteControlPath = NavigationPath()
     @State private var continueWatchingPath = NavigationPath()
+    @State private var feedPath = NavigationPath()
+    @State private var discoverPath = NavigationPath()
 
     // Current selection - initial value is a placeholder; actual startup tab is applied in onAppear
     @State private var selection: SidebarItem = .home
@@ -533,6 +551,10 @@ struct UnifiedTabView: View {
             NavigationStack(path: $sourcesPath) {
                 MediaSourcesView().withNavigationDestinations()
             }
+        case .feed:
+            directTabContent(for: .feed, path: $feedPath)
+        case .discover:
+            directTabContent(for: .discover, path: $discoverPath)
         case .settings:
             NavigationStack(path: $settingsPath) {
                 SettingsView().withNavigationDestinations()
@@ -600,6 +622,8 @@ struct UnifiedTabView: View {
     @State private var openURLPath = NavigationPath()
     @State private var remoteControlPath = NavigationPath()
     @State private var continueWatchingPath = NavigationPath()
+    @State private var feedPath = NavigationPath()
+    @State private var discoverPath = NavigationPath()
 
     // Current selection - initial value is a placeholder; actual startup tab is applied in onAppear
     @State private var selection: SidebarItem = .home
@@ -668,6 +692,10 @@ struct UnifiedTabView: View {
             playlistsListPath = NavigationPath()
         case .sources:
             sourcesPath = NavigationPath()
+        case .feed:
+            feedPath = NavigationPath()
+        case .discover:
+            discoverPath = NavigationPath()
         case .settings:
             settingsPath = NavigationPath()
         case .openURL:
@@ -830,6 +858,20 @@ struct UnifiedTabView: View {
                 Label(SidebarItem.sources.title, systemImage: SidebarItem.sources.systemImage)
             }
 
+        case .feed:
+            Tab(value: SidebarItem.feed) {
+                directTabContent(for: .feed, path: $feedPath)
+            } label: {
+                Label(SidebarItem.feed.title, systemImage: SidebarItem.feed.systemImage)
+            }
+
+        case .discover:
+            Tab(value: SidebarItem.discover) {
+                directTabContent(for: .discover, path: $discoverPath)
+            } label: {
+                Label(SidebarItem.discover.title, systemImage: SidebarItem.discover.systemImage)
+            }
+
         case .settings:
             Tab(value: SidebarItem.settings) {
                 NavigationStack(path: $settingsPath) {
@@ -988,6 +1030,10 @@ extension UnifiedTabView {
             playlistsListPath.append(destination)
         case .sources:
             sourcesPath.append(destination)
+        case .feed:
+            feedPath.append(destination)
+        case .discover:
+            discoverPath.append(destination)
         case .settings:
             settingsPath.append(destination)
         case .nowPlaying:
@@ -1109,6 +1155,54 @@ extension UnifiedTabView {
                     .withNavigationDestinations()
             }
             .id(item.id)
+        }
+    }
+
+    // MARK: - Feed / Discover Direct Shortcuts
+    //
+    // Sidebar-level shortcuts straight to a specific instance's Feed or
+    // Discover tab, bypassing the Sources list. Opt-in (hidden by default —
+    // see SidebarMainItem.defaultVisibility) since most configurations only
+    // have one instance and Sources already gets there in one extra tap.
+
+    /// Resolves the instance these shortcuts open: prefers the subscription
+    /// account's instance (the one whose content the user actually manages),
+    /// then falls back to the first enabled, signed-in instance that can
+    /// show the requested tab. Mirrors the resolution order already used by
+    /// NotRecommendService/InvidiousHistorySyncService for the same reason —
+    /// the subscription account is the closest thing to "the" instance.
+    func directTabInstance(for tab: InstanceBrowseView.BrowseTab) -> Instance? {
+        guard let appEnvironment else { return nil }
+        let account = appEnvironment.settingsManager.subscriptionAccount
+        var candidates = appEnvironment.instancesManager.enabledInstances
+        if let instanceID = account.instanceID,
+           let index = candidates.firstIndex(where: { $0.id == instanceID }) {
+            let preferred = candidates.remove(at: index)
+            candidates.insert(preferred, at: 0)
+        }
+        return candidates.first { instance in
+            guard appEnvironment.credentialsManager(for: instance)?.isLoggedIn(for: instance) == true else { return false }
+            return InstanceBrowseView.BrowseTab.available(for: instance, isLoggedIn: true).contains(tab)
+        }
+    }
+
+    /// Content for a direct Feed/Discover shortcut. Both tabs require being
+    /// signed in (see BrowseTab.available), so an unresolved instance means
+    /// no eligible account was found — point the user at Sources rather than
+    /// showing a bare error, since that's where sign-in actually happens.
+    @ViewBuilder
+    func directTabContent(for tab: InstanceBrowseView.BrowseTab, path: Binding<NavigationPath>) -> some View {
+        NavigationStack(path: path) {
+            if let instance = directTabInstance(for: tab) {
+                InstanceBrowseView(instance: instance, initialTab: tab)
+                    .withNavigationDestinations()
+            } else {
+                ContentUnavailableView(
+                    tab.title,
+                    systemImage: tab.systemImage,
+                    description: Text(String(localized: "sidebar.directTab.signInRequired"))
+                )
+            }
         }
     }
 
