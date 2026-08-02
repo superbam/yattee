@@ -76,14 +76,22 @@ add_extra_platforms(platforms: [:tvos])
 before_all do
   # Skipping update_fastlane in CI for stability
 
-  # Workaround for a confirmed Xcode 26.2 altool regression (fastlane/fastlane#29820,
-  # still open as #30114 as of fastlane 2.237.0): the current altool's provider/app
-  # lookup fails with "Cannot determine the Apple ID from Bundle ID ... and platform
-  # ...", even with valid API-key auth and no pending agreements. --use-old-altool
-  # forces the older, working provider-lookup implementation. Multiple independent
-  # reporters on the issue confirmed this resolves it; drop it once Apple/fastlane
-  # fix the regression upstream.
-  ENV["DELIVER_ALTOOL_ADDITIONAL_UPLOAD_PARAMETERS"] = "--use-old-altool"
+  # Workaround for a confirmed Xcode 26 altool regression (fastlane/fastlane#29698,
+  # #29743, #29820) where altool can't resolve the app from bundle ID + platform
+  # alone ("Cannot determine the Apple ID from Bundle ID ... and platform ..."),
+  # even with valid API-key auth and no pending agreements.
+  #
+  # --use-old-altool (tried first) got past that, but failed differently on this
+  # Xcode version (26.6, newer than the reports above) with "No version found for
+  # 'Apple ID' ... App Store operation failed. (1192)" on both iOS and tvOS —
+  # seemingly its own separate regression in the legacy path. Per the fastlane
+  # maintainer's alternative suggestion, --apple-id disambiguates directly instead
+  # of falling back to older tooling: this is not the developer's Apple ID, it's
+  # the app's own numeric App Store Connect id (from "Ready to upload new build to
+  # TestFlight (App: 6769566744)..." in a prior failed run's log — same id for
+  # every platform of this app, since it's one shared app record). Drop this once
+  # Apple/fastlane fix the underlying regression.
+  ENV["DELIVER_ALTOOL_ADDITIONAL_UPLOAD_PARAMETERS"] = "--apple-id 6769566744"
 end
 
 desc "Get latest TestFlight build number across all platforms"
