@@ -346,8 +346,13 @@ jobs:
 
   update_altstore:
     # Only when an iOS IPA was actually built and released — a mac/tvOS-only
-    # release has no IPA and would corrupt the AltStore source.
-    if: ${{ inputs.build_ios && success() }}
+    # release has no IPA and would corrupt the AltStore source. Bare
+    # success() checks the *entire* transitive job graph, not just this
+    # job's own `needs: [release]` — so it evaluates false whenever a
+    # platform job is skipped by its own input toggle (e.g. build_mac_beta
+    # off), even though that's not actually a failure. Match release's own
+    # condition just above, which was written to tolerate exactly that.
+    if: ${{ inputs.build_ios && !cancelled() && !failure() }}
     needs: [release]
     permissions:
       contents: write
