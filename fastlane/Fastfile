@@ -75,6 +75,15 @@ add_extra_platforms(platforms: [:tvos])
 
 before_all do
   # Skipping update_fastlane in CI for stability
+
+  # Workaround for a confirmed Xcode 26.2 altool regression (fastlane/fastlane#29820,
+  # still open as #30114 as of fastlane 2.237.0): the current altool's provider/app
+  # lookup fails with "Cannot determine the Apple ID from Bundle ID ... and platform
+  # ...", even with valid API-key auth and no pending agreements. --use-old-altool
+  # forces the older, working provider-lookup implementation. Multiple independent
+  # reporters on the issue confirmed this resolves it; drop it once Apple/fastlane
+  # fix the regression upstream.
+  ENV["DELIVER_ALTOOL_ADDITIONAL_UPLOAD_PARAMETERS"] = "--use-old-altool"
 end
 
 desc "Get latest TestFlight build number across all platforms"
