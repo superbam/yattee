@@ -1318,20 +1318,60 @@ struct InstanceBrowseView: View {
     }
 
     /// Shared gate for both the periodic loop and the on-resume check.
-    ///
-    /// Feed only refreshes while still on its first page: `forceRefresh`
-    /// resets pagination, which would silently drop any pages 2+ the user
-    /// scrolled into and jump them back to the top. Once they've paginated,
-    /// it's left to manual pull-to-refresh like Playlists/search already are
-    /// — those aren't "new videos populating" in the same sense anyway.
+    /// Playlists/search aren't "new videos populating" in the same sense as
+    /// the tabs below, so both are left to manual pull-to-refresh.
     private func refreshIfSafe() async {
         await refreshYouTubeHealth()
-        let shouldRefresh = !isInSearchMode && (
-            selectedTab == .popular || selectedTab == .trending ||
-                (selectedTab == .feed && feedPage == 1)
-        )
-        guard shouldRefresh else { return }
-        await startContentLoad(forceRefresh: true)
+        guard !isInSearchMode else { return }
+        switch selectedTab {
+        case .popular, .trending:
+            await startContentLoad(forceRefresh: true)
+        case .feed:
+            await refreshFeedWithNewVideosOnly()
+        case .playlists, .discover:
+            break
+        }
+    }
+
+    /// Prepends genuinely new feed videos instead of replacing the list.
+    ///
+    /// `startContentLoad(forceRefresh:)` resets to page 1 and replaces
+    /// `feedVideos` outright — fine for Popular/Trending, which have no
+    /// pagination, but for Feed it would silently drop any pages 2+ the user
+    /// scrolled into and jump them back to the top. Fetching page 1 fresh
+    /// and inserting only the videos not already present avoids that
+    /// entirely: existing pages, scroll position, and load-more state are
+    /// all untouched, so this is safe to run no matter how far the user has
+    /// paginated — unlike the old behavior, which just skipped Feed past
+    /// page 1 and left it to manual pull-to-refresh.
+    private func refreshFeedWithNewVideosOnly() async {
+        guard let appEnvironment,
+              let credential = appEnvironment.credentialsManager(for: instance)?.credential(for: instance) else { return }
+
+        let fetched: [Video]
+        do {
+            switch instance.type {
+            case .invidious:
+                let api = InvidiousAPI(httpClient: appEnvironment.httpClient)
+                fetched = try await api.feed(instance: instance, sid: credential, page: 1).videos
+            case .piped:
+                let api = PipedAPI(httpClient: appEnvironment.httpClient)
+                fetched = try await api.feed(instance: instance, authToken: credential)
+            default:
+                return
+            }
+        } catch {
+            // Best-effort background check — leave the list as is rather
+            // than surfacing an error over content already on screen.
+            return
+        }
+
+        let existingIDs = Set(feedVideos.map(\.id))
+        let newVideos = fetched.filter { !existingIDs.contains($0.id) }
+        guard !newVideos.isEmpty else { return }
+
+        feedVideos.insert(contentsOf: newVideos, at: 0)
+        prefetchBranding(for: newVideos)
     }
 
     /// Best-effort: `/api/v1/health` only exists on the shorts-filter fork,
