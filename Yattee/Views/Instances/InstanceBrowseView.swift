@@ -164,56 +164,52 @@ struct InstanceBrowseView: View {
         let backgroundStyle: ListBackgroundStyle = listStyle == .inset ? .grouped : .plain
         GeometryReader { geometry in
             #if os(tvOS)
-            VStack(spacing: 0) {
-                // tvOS: Search field, type filter, search filters, view options
-                HStack(spacing: 24) {
-                    TextField("instance.browse.search.placeholder", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .onSubmit {
-                            searchViewModel?.cancelSuggestions()
-                            Task { await searchViewModel?.search(query: searchText) }
+            // Search field, type filter, search filters, and view options
+            // scroll away with the rest of the content — they're the first
+            // item inside the ScrollView, not a fixed header above it. (A
+            // fixed header here previously needed an opaque background to
+            // hide scrolled-past rows bleeding through it, since the
+            // ScrollView below has .scrollClipDisabled(); scrolling as one
+            // unit removes that problem entirely instead of papering over it.)
+            ScrollView {
+                VStack(spacing: 0) {
+                    HStack(spacing: 24) {
+                        TextField("instance.browse.search.placeholder", text: $searchText)
+                            .textFieldStyle(.plain)
+                            .onSubmit {
+                                searchViewModel?.cancelSuggestions()
+                                Task { await searchViewModel?.search(query: searchText) }
+                            }
+
+                        if isInSearchMode {
+                            // Type filter
+                            filterMenu(
+                                title: (searchViewModel?.filters.type ?? .video).title,
+                                selection: Binding(
+                                    get: { searchViewModel?.filters.type ?? .video },
+                                    set: { searchViewModel?.filters.type = $0 }
+                                ),
+                                options: SearchContentType.allCases,
+                                labelForOption: { $0.title }
+                            )
+
+                            // Combined search filters menu
+                            tvOSFiltersMenu
                         }
 
-                    if isInSearchMode {
-                        // Type filter
-                        filterMenu(
-                            title: (searchViewModel?.filters.type ?? .video).title,
-                            selection: Binding(
-                                get: { searchViewModel?.filters.type ?? .video },
-                                set: { searchViewModel?.filters.type = $0 }
-                            ),
-                            options: SearchContentType.allCases,
-                            labelForOption: { $0.title }
-                        )
-
-                        // Combined search filters menu
-                        tvOSFiltersMenu
+                        Button {
+                            showViewOptions = true
+                        } label: {
+                            Label(String(localized: "viewOptions.title"), systemImage: "slider.horizontal.3")
+                        }
                     }
+                    .focusSection()
+                    .padding(.horizontal, 48)
+                    .padding(.top, 20)
+                    .padding(.bottom, 20)
 
-                    Button {
-                        showViewOptions = true
-                    } label: {
-                        Label(String(localized: "viewOptions.title"), systemImage: "slider.horizontal.3")
-                    }
-                }
-                .focusSection()
-                .padding(.horizontal, 48)
-                .padding(.top, 20)
-                .padding(.bottom, 20)
-                // Opaque regardless of listStyle (backgroundStyle.color is
-                // Color.clear for .plain on tvOS): the ScrollView below has
-                // .scrollClipDisabled() so focus-scaled cards near the top
-                // edge aren't clipped, but that also lets scrolled-past rows
-                // keep rendering above the ScrollView's own bounds. Without
-                // a solid background here, that content shows through this
-                // search bar as a ghosting artifact while scrolling.
-                .background(Color.black)
-                // Content
-                ScrollView {
+                    // Content
                     VStack(spacing: 0) {
-                        Spacer()
-                            .frame(height: 20)
-
                         youtubeAccessDegradedBanner
 
                         // Tab picker (hidden during search)
@@ -275,12 +271,12 @@ struct InstanceBrowseView: View {
                         }
                     }
                 }
-                .scrollClipDisabled()
-                .refreshable {
-                    await startContentLoad(forceRefresh: true)
-                }
-                .focusSection()
             }
+            .scrollClipDisabled()
+            .refreshable {
+                await startContentLoad(forceRefresh: true)
+            }
+            .focusSection()
             .onChange(of: geometry.size.width, initial: true) { _, newWidth in
                 viewWidth = newWidth
             }
