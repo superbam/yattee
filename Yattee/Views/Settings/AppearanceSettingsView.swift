@@ -16,10 +16,8 @@ struct AppearanceSettingsView: View {
     var body: some View {
         SettingsFormContainer {
             if let settings = appEnvironment?.settingsManager {
-                // Theme section
-                #if !os(tvOS)
+                // Theme section (uses PlatformMenuPicker, so it's fine on tvOS too)
                 ThemeSection(settings: settings)
-                #endif
 
                 // App icon section
                 #if !os(tvOS)
@@ -56,7 +54,10 @@ private struct ThemeSection: View {
 
     var body: some View {
         SettingsFormSection("settings.appearance.theme.header") {
-            Picker(
+            // PlatformMenuPicker instead of a raw segmented Picker: segmented
+            // controls need per-segment focus navigation, which is awkward
+            // with a tvOS remote — this renders as a menu there instead.
+            PlatformMenuPicker(
                 String(localized: "settings.appearance.theme"),
                 selection: $settings.theme
             ) {
@@ -64,7 +65,9 @@ private struct ThemeSection: View {
                     Text(theme.displayName).tag(theme)
                 }
             }
+            #if !os(tvOS)
             .pickerStyle(.segmented)
+            #endif
         }
     }
 }

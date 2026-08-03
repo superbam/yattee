@@ -10,6 +10,7 @@ import SwiftUI
 struct InstanceBrowseView: View {
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
 
     let instance: Instance
     let initialTab: BrowseTab?
@@ -74,6 +75,16 @@ struct InstanceBrowseView: View {
     private var listStyle: VideoListStyle {
         appEnvironment?.settingsManager.listStyle ?? .inset
     }
+
+    #if os(tvOS)
+    /// Translucent chrome background for banners/strips on tvOS, where
+    /// system materials like `.bar` (used on other platforms) don't render
+    /// the same way. Adapts to colorScheme instead of assuming dark, now
+    /// that the app's theme setting actually applies on tvOS.
+    private var tvOSChromeBackground: Color {
+        colorScheme == .dark ? Color.black.opacity(0.3) : Color.white.opacity(0.6)
+    }
+    #endif
 
     /// The first enabled Yattee Server instance (for avatar URLs).
     private var yatteeServer: Instance? {
@@ -610,7 +621,7 @@ struct InstanceBrowseView: View {
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity)
             #if os(tvOS)
-            .background(Color.black.opacity(0.3))
+            .background(tvOSChromeBackground)
             #endif
         }
     }
@@ -869,7 +880,7 @@ struct InstanceBrowseView: View {
             .padding(.vertical, 12)
         }
         #if os(tvOS)
-        .background(Color.black.opacity(0.3))
+        .background(tvOSChromeBackground)
         #else
         .background(.bar)
         .clipShape(RoundedRectangle(cornerRadius: 20))

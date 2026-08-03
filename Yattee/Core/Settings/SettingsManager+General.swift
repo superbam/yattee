@@ -33,8 +33,12 @@ extension SettingsManager {
     /// while a sheet is presented, and on macOS it never covered secondary
     /// window scenes (Settings), so the override is applied at the
     /// UIKit/AppKit level instead.
+    ///
+    /// tvOS shares this with iOS (both UIKit, `overrideUserInterfaceStyle`
+    /// works the same on both) — this was previously iOS-only, silently
+    /// leaving the theme setting a no-op on tvOS.
     static func applyTheme(_ theme: AppTheme) {
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         for scene in UIApplication.shared.connectedScenes {
             guard let windowScene = scene as? UIWindowScene else { continue }
             for window in windowScene.windows {
