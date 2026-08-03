@@ -9,6 +9,7 @@ import SwiftUI
 
 struct InstanceBrowseView: View {
     @Environment(\.appEnvironment) private var appEnvironment
+    @Environment(\.scenePhase) private var scenePhase
 
     let instance: Instance
     let initialTab: BrowseTab?
@@ -483,6 +484,10 @@ struct InstanceBrowseView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .watchHistoryDidChange)) { _ in
             loadWatchEntries()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task { await refreshOnResumeIfNeeded() }
         }
         .onChange(of: selectedTab) { _, _ in
             isLoading = true
@@ -1279,11 +1284,11 @@ struct InstanceBrowseView: View {
         await task.value
     }
 
-    /// How often to silently re-fetch Popular/Trending while this view stays
-    /// on screen, so newly uploaded/trending videos show up without a manual
-    /// pull-to-refresh. Matches the interval already used elsewhere in the
-    /// app for "periodically re-check while foregrounded" work (subscription
-    /// feed staleness check, Invidious history sync).
+    /// How often to silently re-fetch Popular/Trending/Feed while this view
+    /// stays on screen, so newly uploaded/subscribed videos show up without a
+    /// manual pull-to-refresh. Matches the interval already used elsewhere in
+    /// the app for "periodically re-check while foregrounded" work
+    /// (subscription feed staleness check, Invidious history sync).
     private static let autoRefreshInterval: Duration = .seconds(300)
 
     /// Cancelled automatically by SwiftUI when the view disappears (the
@@ -1291,18 +1296,42 @@ struct InstanceBrowseView: View {
     /// `SourceStatusRefresher.runWhileVisible()` — no manual foreground/
     /// background bookkeeping needed since this is view-scoped.
     ///
-    /// Only refreshes Popular/Trending: Feed resets pagination on
-    /// `forceRefresh` (would jump a scrolled-in feed back to page 1) and
-    /// Playlists/search results aren't "new videos populating" in the same
-    /// sense, so both are left to manual pull-to-refresh.
+    /// Only ticks while the app is foregrounded: a suspended app doesn't
+    /// advance `Task.sleep`, so this alone can't catch staleness built up
+    /// while backgrounded — `refreshOnResumeIfNeeded()` (called from the
+    /// scenePhase handler below) covers that gap on its own schedule.
     private func runAutoRefreshLoop() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: Self.autoRefreshInterval)
             guard !Task.isCancelled else { break }
-            await refreshYouTubeHealth()
-            guard !isInSearchMode, selectedTab == .popular || selectedTab == .trending else { continue }
-            await startContentLoad(forceRefresh: true)
+            await refreshIfSafe()
         }
+    }
+
+    /// Re-checks content when the app returns to the foreground — e.g. the
+    /// Apple TV was idle and got suspended, or the app was backgrounded on
+    /// iOS/macOS — so a stale view isn't left sitting until the next
+    /// `autoRefreshInterval` tick happens to land. Mirrors HomeView's
+    /// `scenePhase == .active` handling for Popular/Trending.
+    private func refreshOnResumeIfNeeded() async {
+        await refreshIfSafe()
+    }
+
+    /// Shared gate for both the periodic loop and the on-resume check.
+    ///
+    /// Feed only refreshes while still on its first page: `forceRefresh`
+    /// resets pagination, which would silently drop any pages 2+ the user
+    /// scrolled into and jump them back to the top. Once they've paginated,
+    /// it's left to manual pull-to-refresh like Playlists/search already are
+    /// — those aren't "new videos populating" in the same sense anyway.
+    private func refreshIfSafe() async {
+        await refreshYouTubeHealth()
+        let shouldRefresh = !isInSearchMode && (
+            selectedTab == .popular || selectedTab == .trending ||
+                (selectedTab == .feed && feedPage == 1)
+        )
+        guard shouldRefresh else { return }
+        await startContentLoad(forceRefresh: true)
     }
 
     /// Best-effort: `/api/v1/health` only exists on the shorts-filter fork,
