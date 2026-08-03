@@ -84,9 +84,7 @@ struct YatteeApp: App {
                     handleContinuedActivity(activity)
                 }
                 .onAppear {
-                    #if !os(tvOS)
                     SettingsManager.applyTheme(appEnvironment.settingsManager.theme)
-                    #endif
                     registerBackgroundTasksIfNeeded()
 
                     // FORK (sources-status): backfill fork detection on cold launch
