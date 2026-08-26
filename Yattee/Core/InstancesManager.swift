@@ -94,13 +94,35 @@ final class InstancesManager {
             return
         }
 
-        // Replace local instances with iCloud data
-        instances = iCloudInstances
+        // Replace local instances with iCloud data, but keep each instance's
+        // own locally-detected fork status rather than taking whatever another
+        // device last pushed.
+        instances = preservingLocallyDetectedForkStatus(in: iCloudInstances)
         // Save to local defaults for offline access
         localDefaults.set(iCloudData, forKey: instancesKey)
 
         // Update sync time
         settingsManager?.updateLastSyncTime()
+    }
+
+    /// `isShortsFilterFork` is probed independently by every device (see
+    /// `Instance.isShortsFilterFork`'s "self-heals" doc) rather than being
+    /// user configuration — it shouldn't travel through iCloud sync at all.
+    /// Without this, two devices whose probes land at different times (e.g.
+    /// one hasn't detected the fork yet, or its probe failed) keep echoing
+    /// their own `isShortsFilterFork` back and forth through iCloud, forever
+    /// stomping the other's confirmed value and permanently hiding Discover
+    /// even though the instance really is a fork and the user really is
+    /// logged in. Only bootstraps from iCloud when this device has no
+    /// determination of its own yet (a fresh install, before its first probe).
+    private func preservingLocallyDetectedForkStatus(in incoming: [Instance]) -> [Instance] {
+        let localByID = Dictionary(uniqueKeysWithValues: instances.map { ($0.id, $0) })
+        return incoming.map { instance in
+            guard let local = localByID[instance.id] else { return instance }
+            var merged = instance
+            merged.isShortsFilterFork = local.isShortsFilterFork ?? instance.isShortsFilterFork
+            return merged
+        }
     }
 
     /// Syncs local data to iCloud (called when enabling iCloud sync).
@@ -129,7 +151,7 @@ final class InstancesManager {
         }
 
         // Replace local with iCloud data
-        instances = iCloudInstances
+        instances = preservingLocallyDetectedForkStatus(in: iCloudInstances)
         localDefaults.set(iCloudData, forKey: instancesKey)
         settingsManager?.updateLastSyncTime()
     }
