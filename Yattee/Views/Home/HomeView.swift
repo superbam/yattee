@@ -1471,7 +1471,7 @@ struct HomeView: View {
     private func loadContinueWatchingData() {
         let allHistory = dataManager?.watchHistory(limit: 100) ?? []
         // Filter to in-progress only (same logic as ContinueWatchingView)
-        recentContinueWatching = allHistory.filter { !$0.isFinished && $0.watchedSeconds > 10 }
+        recentContinueWatching = allHistory.filter { !$0.isFinished && !$0.isLive && $0.watchedSeconds > 10 }
         continueWatchingCount = recentContinueWatching.count
     }
 
@@ -1481,7 +1481,22 @@ struct HomeView: View {
     }
 
     private func loadChannelsData() {
-        channelsCount = dataManager?.subscriptions().count ?? 0
+        guard let service = appEnvironment?.subscriptionService else {
+            channelsCount = 0
+            return
+        }
+
+        // Local accounts always have a count; server accounts only after their
+        // in-memory cache is populated — fetch it once in the background otherwise.
+        if let cached = service.cachedSubscriptionCount {
+            channelsCount = cached
+        } else {
+            Task {
+                if let channels = try? await service.fetchSubscriptions() {
+                    channelsCount = channels.count
+                }
+            }
+        }
     }
 
     private func loadRemoteDevicesData() {

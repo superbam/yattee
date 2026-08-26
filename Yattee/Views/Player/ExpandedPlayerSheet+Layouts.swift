@@ -691,11 +691,11 @@ extension ExpandedPlayerSheet {
                     let isBufferReady = playerState?.isBufferReady ?? false
                     let isAudioOnly = playerState?.currentStream?.isAudioOnly == true
                     let showThumbnail = !info.hasBackend || !isFirstFrameReady || !isBufferReady || isAudioOnly
-                    // Use frozen URL during transition, otherwise current video's thumbnail
-                    let thumbnailURL = isThumbnailFrozen ? displayedThumbnailURL : video.bestThumbnail?.url
+                    // Use frozen URL during transition, otherwise current video's thumbnail chain
+                    let thumbnailURLs = isThumbnailFrozen ? [displayedThumbnailURL].compactMap { $0 } : video.thumbnailURLsByQuality
 
                     // Hidden loader - loads image into @State (invisible)
-                    LazyImage(url: thumbnailURL) { state in
+                    FallbackLazyImage(urls: thumbnailURLs) { state in
                         Color.clear
                             .onChange(of: state.image) { _, newImage in
                                 if let newImage { displayedThumbnailImage = newImage }
@@ -861,6 +861,17 @@ extension ExpandedPlayerSheet {
                     },
                     onStreamSelected: { [self] stream, audioStream in
                         switchToStream(stream, audioStream: audioStream)
+                    },
+                    embeddedAudioTracks: playerService.embeddedAudioTracks,
+                    embeddedSubtitleTracks: playerService.embeddedSubtitleTracks,
+                    currentEmbeddedAudioTrackID: playerService.selectedEmbeddedAudioTrackID,
+                    currentEmbeddedSubtitleTrackID: playerService.selectedEmbeddedSubtitleTrackID,
+                    embeddedVideoTrack: playerService.primaryEmbeddedVideoTrack,
+                    onEmbeddedAudioTrackSelected: { trackID in
+                        playerService.selectEmbeddedAudioTrack(trackID)
+                    },
+                    onEmbeddedSubtitleTrackSelected: { trackID in
+                        playerService.selectEmbeddedSubtitleTrack(trackID)
                     },
                     panscanValue: navigationCoordinator?.pinchPanscan ?? 0.0,
                     isPanscanAllowed: !isPortraitPanelVisible,
@@ -1132,6 +1143,17 @@ extension ExpandedPlayerSheet {
                 onStreamSelected: { [self] stream, audioStream in
                     switchToStream(stream, audioStream: audioStream)
                 },
+                embeddedAudioTracks: playerService.embeddedAudioTracks,
+                embeddedSubtitleTracks: playerService.embeddedSubtitleTracks,
+                currentEmbeddedAudioTrackID: playerService.selectedEmbeddedAudioTrackID,
+                currentEmbeddedSubtitleTrackID: playerService.selectedEmbeddedSubtitleTrackID,
+                embeddedVideoTrack: playerService.primaryEmbeddedVideoTrack,
+                onEmbeddedAudioTrackSelected: { trackID in
+                    playerService.selectEmbeddedAudioTrack(trackID)
+                },
+                onEmbeddedSubtitleTrackSelected: { trackID in
+                    playerService.selectEmbeddedSubtitleTrack(trackID)
+                },
                 panscanValue: navigationCoordinator?.pinchPanscan ?? 0.0,
                 isPanscanAllowed: !isPortraitPanelVisible,
                 onTogglePanscan: { [weak navigationCoordinator] in
@@ -1331,11 +1353,11 @@ extension ExpandedPlayerSheet {
                         let isBufferReady = playerState?.isBufferReady ?? false
                         let isAudioOnly = playerState?.currentStream?.isAudioOnly == true
                         let showThumbnail = !info.hasBackend || !isFirstFrameReady || !isBufferReady || isAudioOnly
-                        // Use frozen URL during transition, otherwise current video's thumbnail
-                        let thumbnailURL = isThumbnailFrozen ? displayedThumbnailURL : video.bestThumbnail?.url
+                        // Use frozen URL during transition, otherwise current video's thumbnail chain
+                        let thumbnailURLs = isThumbnailFrozen ? [displayedThumbnailURL].compactMap { $0 } : video.thumbnailURLsByQuality
 
                         // Hidden loader - loads image into @State (invisible)
-                        LazyImage(url: thumbnailURL) { state in
+                        FallbackLazyImage(urls: thumbnailURLs) { state in
                             Color.clear
                                 .onChange(of: state.image) { _, newImage in
                                     if let newImage { displayedThumbnailImage = newImage }
@@ -1508,6 +1530,17 @@ extension ExpandedPlayerSheet {
                     },
                     onStreamSelected: { [self] stream, audioStream in
                         switchToStream(stream, audioStream: audioStream)
+                    },
+                    embeddedAudioTracks: playerService.embeddedAudioTracks,
+                    embeddedSubtitleTracks: playerService.embeddedSubtitleTracks,
+                    currentEmbeddedAudioTrackID: playerService.selectedEmbeddedAudioTrackID,
+                    currentEmbeddedSubtitleTrackID: playerService.selectedEmbeddedSubtitleTrackID,
+                    embeddedVideoTrack: playerService.primaryEmbeddedVideoTrack,
+                    onEmbeddedAudioTrackSelected: { trackID in
+                        playerService.selectEmbeddedAudioTrack(trackID)
+                    },
+                    onEmbeddedSubtitleTrackSelected: { trackID in
+                        playerService.selectEmbeddedSubtitleTrack(trackID)
                     },
                     panscanValue: navigationCoordinator?.pinchPanscan ?? 0.0,
                     isPanscanAllowed: !(isPanelPinned && isPanelVisible),

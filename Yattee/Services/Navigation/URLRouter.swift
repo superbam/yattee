@@ -84,7 +84,7 @@ struct URLRouter: Sendable {
         let excludedHosts = [
             "google.com", "www.google.com",
             "bing.com", "www.bing.com",
-            "duckduckgo.com",
+            "duckduckgo.com", "www.duckduckgo.com",
             "apple.com", "www.apple.com",
             "github.com", "www.github.com"
         ]
@@ -94,6 +94,32 @@ struct URLRouter: Sendable {
         }
 
         return true
+    }
+
+    // MARK: - Wrapper Unwrapping
+
+    /// Resolve a `yattee://open?url={encoded_url}` wrapper (share extension) to the inner URL.
+    /// Returns the input unchanged for any other URL. The wrapper's query holds the full
+    /// original link, so timestamp parsing must run against the unwrapped URL.
+    ///
+    /// The share extension encodes with `.urlQueryAllowed`, which leaves `?`, `&`, and `=`
+    /// intact - URLComponents would split the inner URL's own query into separate wrapper
+    /// items (losing e.g. `&t=120`), so take the raw remainder after `?url=` instead.
+    func unwrapped(_ url: URL) -> URL {
+        guard url.scheme?.lowercased() == "yattee", url.host == "open",
+              let range = url.absoluteString.range(of: "?url=") else {
+            return url
+        }
+        let raw = String(url.absoluteString[range.upperBound...])
+        guard let decoded = raw.removingPercentEncoding,
+              let innerURL = URL(string: decoded) else {
+            return url
+        }
+        // Unwrap once more in case the wrapper was itself wrapped
+        if innerURL.scheme?.lowercased() == "yattee", innerURL.host == "open", innerURL != url {
+            return unwrapped(innerURL)
+        }
+        return innerURL
     }
 
     // MARK: - Timestamp Parsing
@@ -119,9 +145,11 @@ struct URLRouter: Sendable {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
 
-        // Plain numeric value (e.g. "90", "90.5")
+        // Plain numeric value (e.g. "90", "90.5"). Reject non-finite values
+        // ("inf"/"infinity"/"nan") that `TimeInterval(_:)` accepts — a `?t=inf`
+        // link would otherwise seek the player to `Double.infinity`.
         if let value = TimeInterval(trimmed) {
-            return value >= 0 ? value : nil
+            return (value.isFinite && value >= 0) ? value : nil
         }
 
         // Compound form like "1h2m3s", "2m30s", "90s"

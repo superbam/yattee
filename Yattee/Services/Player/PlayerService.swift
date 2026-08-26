@@ -62,6 +62,44 @@ final class PlayerService {
     /// Currently loaded caption.
     private(set) var currentCaption: Caption?
 
+    /// Tracks reported by mpv for the currently loaded file (embedded and external).
+    private(set) var embeddedTracks: [MPVTrack] = []
+
+    /// Embedded (in-container) audio tracks of the current file.
+    var embeddedAudioTracks: [MPVTrack] {
+        embeddedTracks.filter { $0.type == .audio && !$0.isExternal }
+    }
+
+    /// Embedded (in-container) subtitle tracks of the current file.
+    var embeddedSubtitleTracks: [MPVTrack] {
+        embeddedTracks.filter { $0.type == .sub && !$0.isExternal }
+    }
+
+    /// The embedded audio track mpv currently plays, if any.
+    var selectedEmbeddedAudioTrackID: Int? {
+        embeddedAudioTracks.first(where: \.isSelected)?.trackID
+    }
+
+    /// The embedded subtitle track mpv currently shows, if any.
+    var selectedEmbeddedSubtitleTrackID: Int? {
+        embeddedSubtitleTracks.first(where: \.isSelected)?.trackID
+    }
+
+    /// The video track mpv currently plays. Used to label local-file streams,
+    /// whose Stream carries no resolution/codec/fps metadata before demux.
+    var primaryEmbeddedVideoTrack: MPVTrack? {
+        let videoTracks = embeddedTracks.filter { $0.type == .video && !$0.isExternal && !$0.isAlbumArt }
+        return videoTracks.first(where: \.isSelected) ?? videoTracks.first
+    }
+
+    /// Embedded-track picks that should survive same-video reloads
+    /// (quality switch, audio-mode toggle, buffer-stall retry).
+    private var desiredEmbeddedAudioTrackID: Int?
+    private var desiredEmbeddedSubtitleTrackID: Int?
+
+    /// Whether preferred-language auto-selection already ran for this load.
+    private var didAutoSelectEmbeddedTracks = false
+
     /// The current download being played, if any.
     private(set) var currentDownload: Download?
 
@@ -203,7 +241,9 @@ final class PlayerService {
     ///   - stream: Optional specific stream to use (if provided, skips fetching streams from API)
     ///   - audioStream: Optional separate audio stream (for video-only streams)
     ///   - startTime: Optional start time in seconds
-    func play(video: Video, stream: Stream? = nil, audioStream: Stream? = nil, startTime: TimeInterval? = nil) async {
+    ///   - forceStartTime: When true, startTime is an explicit user request (timed link,
+    ///     chapter tap) and is honored even past the completion threshold
+    func play(video: Video, stream: Stream? = nil, audioStream: Stream? = nil, startTime: TimeInterval? = nil, forceStartTime: Bool = false) async {
         // Downloaded/local files bypass stream selection (they arrive here as
         // ready-made file:// streams), so audio mode is applied at this choke
         // point instead of in selectStreams.
@@ -242,6 +282,15 @@ final class PlayerService {
         // typically lands before playback for an idle account.
         if isNewVideo, case .global = video.id.source {
             Task { @MainActor [weak self] in await self?.invidiousHistorySync?.syncIfDue() }
+        }
+
+        // Embedded-track state: the mpv-reported list always refreshes on load,
+        // but sticky user picks only reset when the video actually changes.
+        embeddedTracks = []
+        didAutoSelectEmbeddedTracks = false
+        if isNewVideo {
+            desiredEmbeddedAudioTrackID = nil
+            desiredEmbeddedSubtitleTrackID = nil
         }
 
         // Clear sponsor block state from previous video
@@ -413,10 +462,18 @@ final class PlayerService {
             }
             LoggingService.shared.logPlayer("Replay check: savedProgress=\(savedProgress ?? -1), startTime=\(startTime ?? -1), duration=\(video.duration), threshold=\(completionThreshold)")
 
-            if let startTime {
+            if video.isLive || selectedStream.isLive {
+                // Live playback positions are relative to the live edge, so a stored
+                // or passed position means nothing - always start at the live edge.
+                seekTime = 0
+            } else if let startTime {
                 // Explicit startTime provided - use it (0 means play from beginning, >0 means resume)
                 // For quality switching with startTime > 0, honor the time unless video was completed
-                if startTime > 0 && completionThreshold > 0 && startTime >= completionThreshold {
+                if forceStartTime {
+                    // User-requested timestamp (timed link, chapter tap) - always honor it,
+                    // clamped so an out-of-range value can't seek past the end.
+                    seekTime = effectiveDuration > 0 ? min(startTime, max(0, effectiveDuration - 1)) : startTime
+                } else if startTime > 0 && completionThreshold > 0 && startTime >= completionThreshold {
                     seekTime = 0  // Video was completed, start over
                 } else {
                     seekTime = startTime
@@ -511,8 +568,10 @@ final class PlayerService {
                    let localThumbnailPath = download.localThumbnailPath {
                     localThumbnailURL = downloadManager.downloadsDirectory().appendingPathComponent(localThumbnailPath)
                 }
+                // Reliable (hqdefault) variant: artwork is a single fetch with no
+                // fallback, and the best advertised variant often 404s.
                 await nowPlayingService.loadArtwork(
-                    from: videoForNowPlaying.bestThumbnail?.url,
+                    from: videoForNowPlaying.reliableThumbnailURL,
                     localPath: localThumbnailURL
                 )
             }
@@ -520,7 +579,7 @@ final class PlayerService {
             // Start playback
             LoggingService.shared.logPlayer("Calling backend.play(), playbackState: \(state.playbackState)")
             loadingVideoID = nil  // Clear loading flag - time updates are now valid
-            sleepPreventionService.preventSleep()
+            updateSleepPrevention()
 
             // For MPV backend, wait for sufficient buffer before starting playback
             // This prevents the brief pause/stutter that occurs when MPV starts playing
@@ -593,6 +652,17 @@ final class PlayerService {
         }
     }
 
+    /// Reconciles sleep prevention with what is actually on screen: display sleep
+    /// is only prevented when a video track is rendered. Audio-only playback
+    /// lets the screen sleep normally.
+    private func updateSleepPrevention() {
+        if state.currentStream?.isAudioOnly == true {
+            sleepPreventionService.allowSleep()
+        } else {
+            sleepPreventionService.preventSleep()
+        }
+    }
+
     /// Pauses playback.
     /// - Parameter shouldSaveProgress: Whether to save watch progress. Set to `false` when video has
     ///   already ended (100% was saved in `backendDidFinishPlaying`).
@@ -608,7 +678,7 @@ final class PlayerService {
 
     /// Resumes playback.
     func resume() {
-        sleepPreventionService.preventSleep()
+        updateSleepPrevention()
         currentBackend?.play()
         state.setPlaybackState(.playing)
         nowPlayingService.updatePlaybackRate(isPlaying: true, currentTime: state.currentTime)
@@ -659,6 +729,10 @@ final class PlayerService {
         preDownloadedSubtitleFolders.removeAll()
         cleanupAllTempSubtitles()
         currentCaption = nil
+        embeddedTracks = []
+        desiredEmbeddedAudioTrackID = nil
+        desiredEmbeddedSubtitleTrackID = nil
+        didAutoSelectEmbeddedTracks = false
         lastSkippedSegmentID = nil
         nowPlayingService.clearNowPlaying()
     }
@@ -715,7 +789,7 @@ final class PlayerService {
         if phase == .background {
             sleepPreventionService.allowSleep()
         } else if phase == .active && state.playbackState == .playing {
-            sleepPreventionService.preventSleep()
+            updateSleepPrevention()
         }
 
         #if os(macOS)
@@ -923,7 +997,8 @@ final class PlayerService {
         video: Video,
         fallbackStream: Stream? = nil,
         fallbackAudioStream: Stream? = nil,
-        startTime: TimeInterval? = nil
+        startTime: TimeInterval? = nil,
+        forceStartTime: Bool = false
     ) async {
         // Check if this is a media source video needing on-demand resolution
         // Uses unified method that fetches folder contents dynamically - works from any playback source
@@ -931,7 +1006,7 @@ final class PlayerService {
             do {
                 let (stream, captions) = try await resolveMediaSourceStream(for: video)
                 currentDownload = nil
-                await play(video: video, stream: stream, audioStream: nil, startTime: startTime)
+                await play(video: video, stream: stream, audioStream: nil, startTime: startTime, forceStartTime: forceStartTime)
 
                 // Set available captions and auto-select preferred
                 if !captions.isEmpty {
@@ -955,7 +1030,7 @@ final class PlayerService {
             if let (downloadedVideo, localStream, audioStream, captionURL, dislikeCount) = downloadManager.videoAndStream(for: download) {
                 // Store the download info for later reference
                 currentDownload = download
-                await play(video: downloadedVideo, stream: localStream, audioStream: audioStream, startTime: startTime)
+                await play(video: downloadedVideo, stream: localStream, audioStream: audioStream, startTime: startTime, forceStartTime: forceStartTime)
                 // Restore dislike count from download (for offline playback)
                 if let dislikeCount {
                     state.dislikeCount = dislikeCount
@@ -986,11 +1061,11 @@ final class PlayerService {
                     autoDismissDelay: 4.0
                 )
                 currentDownload = nil
-                await play(video: video, stream: fallbackStream, audioStream: fallbackAudioStream, startTime: startTime)
+                await play(video: video, stream: fallbackStream, audioStream: fallbackAudioStream, startTime: startTime, forceStartTime: forceStartTime)
             }
         } else {
             currentDownload = nil
-            await play(video: video, stream: fallbackStream, audioStream: fallbackAudioStream, startTime: startTime)
+            await play(video: video, stream: fallbackStream, audioStream: fallbackAudioStream, startTime: startTime, forceStartTime: forceStartTime)
         }
     }
 
@@ -1016,7 +1091,12 @@ final class PlayerService {
     /// - Parameters:
     ///   - video: The video to open
     ///   - startTime: Optional start time in seconds (used for continue watching)
-    func openVideo(_ video: Video, startTime: TimeInterval? = nil) {
+    ///   - forceStartTime: When true, startTime is an explicit user request (timed link,
+    ///     chapter tap) and is honored even past the completion threshold
+    func openVideo(_ video: Video, startTime: TimeInterval? = nil, forceStartTime: Bool = false) {
+        // Live streams have no meaningful resume position - drop any passed one
+        // so callers with a stale watch entry cannot seek into the live window.
+        let startTime = video.isLive ? nil : startTime
 
         // Check if MPV PiP is active - if so, don't expand the player
         #if os(iOS) || os(macOS)
@@ -1058,7 +1138,7 @@ final class PlayerService {
         }
 
         currentPlayTask = Task {
-            await playPreferringDownloaded(video: video, startTime: startTime)
+            await playPreferringDownloaded(video: video, startTime: startTime, forceStartTime: forceStartTime)
         }
     }
 
@@ -1343,11 +1423,77 @@ final class PlayerService {
 
         mpvBackend.loadCaption(caption)
         currentCaption = caption
+        // An explicit external pick (or Off) overrides any embedded-subtitle intent
+        desiredEmbeddedSubtitleTrackID = nil
 
         if let caption {
             LoggingService.shared.logPlayer("Loaded caption: \(caption.displayName)")
         } else {
             LoggingService.shared.logPlayer("Disabled subtitles")
+        }
+    }
+
+    /// Selects an embedded audio track by mpv track id (live, no reload).
+    /// Only works with MPV backend.
+    func selectEmbeddedAudioTrack(_ trackID: Int) {
+        guard let mpvBackend = currentBackend as? MPVBackend else { return }
+
+        desiredEmbeddedAudioTrackID = trackID
+        mpvBackend.selectEmbeddedAudioTrack(trackID)
+        LoggingService.shared.logPlayer("Selected embedded audio track \(trackID)")
+    }
+
+    /// Selects an embedded subtitle track by mpv track id (nil = off).
+    /// Only works with MPV backend.
+    func selectEmbeddedSubtitleTrack(_ trackID: Int?) {
+        guard let mpvBackend = currentBackend as? MPVBackend else { return }
+
+        desiredEmbeddedSubtitleTrackID = trackID
+        currentCaption = nil
+        mpvBackend.selectEmbeddedSubtitleTrack(trackID)
+        LoggingService.shared.logPlayer("Selected embedded subtitle track \(trackID.map(String.init) ?? "off")")
+    }
+
+    /// Re-applies a sticky embedded-track pick after a reload, or auto-selects
+    /// preferred languages once per load. Called whenever mpv's track list changes.
+    private func reapplyOrAutoSelectEmbeddedTracks() {
+        guard let mpvBackend = currentBackend as? MPVBackend else { return }
+
+        // Re-apply sticky user picks. Loop-safe: selecting fires one more
+        // track-list update in which the track is already selected.
+        if let desired = desiredEmbeddedAudioTrackID,
+           let track = embeddedAudioTracks.first(where: { $0.trackID == desired }),
+           !track.isSelected {
+            mpvBackend.selectEmbeddedAudioTrack(desired)
+        }
+        if let desired = desiredEmbeddedSubtitleTrackID,
+           let track = embeddedSubtitleTracks.first(where: { $0.trackID == desired }),
+           !track.isSelected {
+            mpvBackend.selectEmbeddedSubtitleTrack(desired)
+        }
+
+        // Auto-select preferred languages once per load. Skipped while the
+        // list is empty so the reset delivered at load start doesn't consume
+        // the one-shot flag.
+        guard !didAutoSelectEmbeddedTracks, !embeddedTracks.isEmpty else { return }
+        didAutoSelectEmbeddedTracks = true
+
+        if desiredEmbeddedAudioTrackID == nil,
+           embeddedAudioTracks.count > 1,
+           let match = embeddedAudioTracks.first(where: { $0.matchesLanguage(settingsManager?.preferredAudioLanguage) }),
+           !match.isSelected {
+            mpvBackend.selectEmbeddedAudioTrack(match.trackID)
+            LoggingService.shared.logPlayer("Auto-selected embedded audio track \(match.trackID) (\(match.displayName))")
+        }
+
+        // External captions win: the preferred-caption flow sets currentCaption
+        // before mpv reports any tracks.
+        if desiredEmbeddedSubtitleTrackID == nil,
+           currentCaption == nil,
+           let match = embeddedSubtitleTracks.first(where: { !$0.isForced && $0.matchesLanguage(settingsManager?.preferredSubtitlesLanguage) }),
+           !match.isSelected {
+            mpvBackend.selectEmbeddedSubtitleTrack(match.trackID)
+            LoggingService.shared.logPlayer("Auto-selected embedded subtitle track \(match.trackID) (\(match.displayName))")
         }
     }
 
@@ -1367,6 +1513,67 @@ final class PlayerService {
         )
 
         loadCaption(caption)
+    }
+
+    /// Loads a user-picked external subtitle file (iOS document picker / macOS open panel).
+    /// Copies the file into the per-video temp subtitle directory (so mpv can read it
+    /// after the picker's security scope expires), registers it as a selectable
+    /// Caption for the current video, and activates it.
+    /// - Parameter pickedURL: The URL returned by the file picker.
+    func loadExternalSubtitleFile(from pickedURL: URL) {
+        guard let video = state.currentVideo, video.isFromMediaSource else { return }
+
+        let fileName = pickedURL.lastPathComponent
+        let didStartAccessing = pickedURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                pickedURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        // Same hash-based directory scheme as SMBClient's subtitle pre-download:
+        // media-source video IDs contain slashes, so they can't be path components.
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("yattee-subtitles", isDirectory: true)
+            .appendingPathComponent(String(video.id.id.hashValue), isDirectory: true)
+        let destinationURL = tempDir.appendingPathComponent("picked-\(fileName)")
+
+        do {
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.copyItem(at: pickedURL, to: destinationURL)
+        } catch {
+            LoggingService.shared.error(
+                "Failed to copy picked subtitle file \(fileName): \(error.localizedDescription)",
+                category: .player
+            )
+            return
+        }
+
+        // Detect language from a filename suffix like "Movie.en.srt" or "Movie_en.srt"
+        let baseName = pickedURL.deletingPathExtension().lastPathComponent
+        var languageCode = "und"
+        if let suffix = baseName.components(separatedBy: CharacterSet(charactersIn: "._")).last,
+           (2...3).contains(suffix.count),
+           Locale.current.localizedString(forLanguageCode: suffix) != nil {
+            languageCode = suffix.lowercased()
+        }
+
+        let caption = Caption(
+            label: baseName,
+            languageCode: languageCode,
+            url: destinationURL,
+            pickedFileName: fileName
+        )
+
+        // Re-picking the same file replaces its row instead of duplicating it
+        availableCaptions.removeAll { $0.id == caption.id }
+        availableCaptions.append(caption)
+
+        loadCaption(caption)
+        LoggingService.shared.logPlayer("Loaded external subtitle file: \(fileName)")
     }
 
     /// Loads online streams for the current video (when playing downloaded content).
@@ -2668,8 +2875,9 @@ final class PlayerService {
         guard let video = state.currentVideo,
               state.currentTime > 0 else { return }
 
-        // Save locally only during playback - no iCloud sync overhead
-        dataManager.updateWatchProgressLocal(for: video, seconds: state.currentTime, duration: state.duration)
+        // Save locally only during playback - no iCloud sync overhead.
+        // Live streams still get a history entry, but no resume position.
+        dataManager.updateWatchProgressLocal(for: video, seconds: state.currentTime, duration: state.duration, isLive: state.isLive)
 
         // Push the position to the Invidious account (debounced internally).
         invidiousHistorySync?.pushPosition(videoID: video.id.videoID, seconds: state.currentTime)
@@ -2693,6 +2901,10 @@ final class PlayerService {
         guard settingsManager?.incognitoModeEnabled != true,
               settingsManager?.saveWatchHistory != false,
               let video = state.currentVideo else { return }
+
+        // A live stream never "completes" - saveProgress() has already recorded
+        // its history entry, and writing a duration here would fabricate progress.
+        guard !state.isLive else { return }
 
         // Use video.duration (API-reported) to match WatchEntry.duration stored value.
         // This ensures 100% progress since WatchEntry.progress = watchedSeconds / WatchEntry.duration.
@@ -2722,7 +2934,7 @@ final class PlayerService {
               state.currentTime > 0 else { return }
 
         // Save and queue for iCloud sync (used when video closes/switches)
-        dataManager.updateWatchProgress(for: video, seconds: state.currentTime, duration: state.duration)
+        dataManager.updateWatchProgress(for: video, seconds: state.currentTime, duration: state.duration, isLive: state.isLive)
 
         // Push the final position to the Invidious account (force past debounce).
         invidiousHistorySync?.pushPosition(videoID: video.id.videoID, seconds: state.currentTime, force: true)
@@ -2970,6 +3182,11 @@ extension PlayerService: PlayerBackendDelegate {
         state.setRetryState(retryState)
     }
 
+    func backend(_ backend: any PlayerBackend, didUpdateTracks tracks: [MPVTrack]) {
+        embeddedTracks = tracks
+        reapplyOrAutoSelectEmbeddedTracks()
+    }
+
     func backend(_ backend: any PlayerBackend, didRequestStreamRefresh atTime: TimeInterval?) {
         LoggingService.shared.logPlayer("Stream refresh requested at time: \(atTime ?? -1)")
 
@@ -2996,6 +3213,15 @@ extension PlayerService: PlayerBackendDelegate {
         state.setPlaybackState(.ended)
         saveProgressAsCompleted()
         delegate?.playerServiceDidFinishPlaying(self)
+
+        // Repeat one: restart immediately - no countdown, independent of queue contents
+        // and the auto-play-next setting (that setting governs advancing to the next video)
+        if state.queueMode == .repeatOne {
+            Task {
+                await playNext()
+            }
+            return
+        }
 
         // Auto-play immediately if player is not visible (no point showing countdown)
         // UI (ExpandedPlayerSheet) will handle countdown when player is visible

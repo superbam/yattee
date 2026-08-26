@@ -947,7 +947,7 @@ private struct InvidiousAuthPlaylist: Decodable, Sendable {
             description: description,
             author: author.map { Author(id: "", name: $0) },
             videoCount: videoCount,
-            thumbnailURL: videos?.first?.videoThumbnails?.first?.thumbnailURL(baseURL: baseURL),
+            thumbnailURL: Thumbnail.reliableURL(for: videos?.first?.videoThumbnails?.first?.thumbnailURL(baseURL: baseURL)),
             videos: videos?.map { $0.toVideo(baseURL: baseURL) } ?? []
         )
     }
@@ -1745,7 +1745,7 @@ private struct InvidiousPlaylist: Decodable, Sendable {
             description: description,
             author: authorId.map { Author(id: $0, name: author ?? "") },
             videoCount: videoCount,
-            thumbnailURL: validVideos.first?.thumbnails.first?.url,
+            thumbnailURL: Thumbnail.reliableURL(for: validVideos.first?.thumbnails.first?.url),
             videos: validVideos
         )
     }
@@ -1877,7 +1877,7 @@ private struct InvidiousSearchPlaylist: Decodable, Sendable {
             title: title,
             author: authorId.map { Author(id: $0, name: author ?? "") },
             videoCount: videoCount,
-            thumbnailURL: thumbnailURL,
+            thumbnailURL: Thumbnail.reliableURL(for: thumbnailURL),
             videos: videos?.map { $0.toVideo(baseURL: baseURL) } ?? []
         )
     }

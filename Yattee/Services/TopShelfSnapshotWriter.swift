@@ -54,7 +54,7 @@ enum TopShelfSnapshotWriter {
         guard let dataManager else { return }
         let history = dataManager.watchHistory(limit: 50)
         let items = history
-            .filter { !$0.isFinished && $0.watchedSeconds > 10 }
+            .filter { !$0.isFinished && !$0.isLive && $0.watchedSeconds > 10 }
             .prefix(TopShelfSnapshot.maxItems)
             .compactMap(Self.makeItem(from:))
         TopShelfSnapshot.write(Array(items), section: .continueWatching)
@@ -100,7 +100,7 @@ private extension TopShelfSnapshotWriter {
             title: bookmark.title,
             authorName: bookmark.authorName,
             duration: bookmark.duration,
-            thumbnailURL: bookmark.thumbnailURLString,
+            thumbnailURL: reliableThumbnailURLString(bookmark.thumbnailURLString),
             deepLinkURL: deepLink,
             progressSeconds: nil
         )
@@ -118,7 +118,7 @@ private extension TopShelfSnapshotWriter {
             title: entry.title,
             authorName: entry.authorName,
             duration: entry.duration,
-            thumbnailURL: entry.thumbnailURLString,
+            thumbnailURL: reliableThumbnailURLString(entry.thumbnailURLString),
             deepLinkURL: deepLink,
             progressSeconds: entry.watchedSeconds
         )
@@ -190,8 +190,17 @@ private extension TopShelfSnapshotWriter {
         }
     }
 
+    /// The Top Shelf extension sets a single image URL with no failure fallback,
+    /// so rewrite to the always-available `hqdefault` variant: the best advertised
+    /// variant is often `maxresdefault`, which 404s for many older videos and
+    /// would leave an empty tile.
     static func bestThumbnailURL(from thumbnails: [Thumbnail]) -> String? {
-        thumbnails.max(by: { $0.quality < $1.quality })?.url.absoluteString
+        Thumbnail.reliableURL(for: thumbnails.max(by: { $0.quality < $1.quality })?.url)?.absoluteString
+    }
+
+    static func reliableThumbnailURLString(_ urlString: String?) -> String? {
+        guard let urlString else { return nil }
+        return Thumbnail.reliableURL(for: URL(string: urlString))?.absoluteString ?? urlString
     }
 }
 #endif

@@ -134,7 +134,8 @@ struct ExpandedPlayerSheet: View {
 
     var isAutoPlayEnabled: Bool {
         (appEnvironment?.settingsManager.queueEnabled ?? true) &&
-        (appEnvironment?.settingsManager.queueAutoPlayNext ?? true)
+        (appEnvironment?.settingsManager.queueAutoPlayNext ?? true) &&
+        playerState?.queueMode != .repeatOne
     }
 
     var autoPlayCountdownDuration: Int {
@@ -697,6 +698,11 @@ private struct PlayerSheetsModifier: ViewModifier {
                 currentRate: playerState?.rate ?? .x1,
                 isControlsLocked: playerState?.isControlsLocked ?? false,
                 isAudioMode: appEnvironment?.settingsManager.audioOnlyModeEnabled ?? false,
+                embeddedAudioTracks: playerService.embeddedAudioTracks,
+                embeddedSubtitleTracks: playerService.embeddedSubtitleTracks,
+                currentEmbeddedAudioTrackID: playerService.selectedEmbeddedAudioTrackID,
+                currentEmbeddedSubtitleTrackID: playerService.selectedEmbeddedSubtitleTrackID,
+                embeddedVideoTrack: playerService.primaryEmbeddedVideoTrack,
                 onStreamSelected: { stream, audioStream in
                     onStreamSelected(stream, audioStream)
                 },
@@ -712,6 +718,12 @@ private struct PlayerSheetsModifier: ViewModifier {
                     Task {
                         await playerService.switchToOnlineStream(stream, audioStream: audioStream)
                     }
+                },
+                onEmbeddedAudioTrackSelected: { trackID in
+                    playerService.selectEmbeddedAudioTrack(trackID)
+                },
+                onEmbeddedSubtitleTrackSelected: { trackID in
+                    playerService.selectEmbeddedSubtitleTrack(trackID)
                 },
                 onRateChanged: { rate in
                     playerState?.rate = rate
@@ -829,8 +841,10 @@ private struct PlayerEventHandlersModifier: ViewModifier {
 
         // Clear loaded image so new video gets fresh thumbnail
         displayedThumbnailImage = nil
-        // Capture thumbnail URL immediately and freeze to prevent flash during details load
-        displayedThumbnailURL = playerState?.currentVideo?.bestThumbnail?.url
+        // Capture thumbnail URL immediately and freeze to prevent flash during details load.
+        // Use the reliable (hqdefault) variant: the frozen URL is loaded without fallback,
+        // and the best advertised variant often 404s for older videos.
+        displayedThumbnailURL = playerState?.currentVideo?.reliableThumbnailURL
         isThumbnailFrozen = true
     }
 

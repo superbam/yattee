@@ -7924,6 +7924,39 @@
         }
       }
     },
+    "player.track.default" : {
+      "comment" : "Badge for the container's default embedded track",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DEFAULT"
+          }
+        }
+      }
+    },
+    "player.track.forced" : {
+      "comment" : "Badge for forced embedded subtitle tracks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FORCED"
+          }
+        }
+      }
+    },
+    "player.track.number %lld" : {
+      "comment" : "Fallback name for an embedded track without title or language",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Track %lld"
+          }
+        }
+      }
+    },
     "player.tvos.volumeDown" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8241,6 +8274,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No Playlists"
+          }
+        }
+      }
+    },
+    "playlists.search.placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search playlists"
           }
         }
       }
@@ -12185,6 +12228,28 @@
         }
       }
     },
+    "settings.icloud.unavailable" : {
+      "comment" : "Label shown instead of the iCloud sync toggle when the app installation lacks iCloud entitlements",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud Sync Unavailable"
+          }
+        }
+      }
+    },
+    "settings.icloud.unavailable.footer" : {
+      "comment" : "Footer explaining why iCloud sync is unavailable in sideloaded installations",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This copy of Yattee was installed without iCloud access, so sync is not available. iCloud sync requires installing the app from the App Store or TestFlight."
+          }
+        }
+      }
+    },
     "settings.icloud.update.message" : {
       "comment" : "Message explaining that newer app version is needed for some synced data",
       "localizations" : {
@@ -14965,6 +15030,17 @@
         }
       }
     },
+    "settings.subscriptions.export.error.title" : {
+      "comment" : "Title for export error toast",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Failed"
+          }
+        }
+      }
+    },
     "settings.subscriptions.export.footer %lld" : {
       "comment" : "Footer showing subscription count for export",
       "localizations" : {
@@ -15075,6 +15151,83 @@
         }
       }
     },
+    "settings.subscriptions.localData.delete.button" : {
+      "comment" : "Button to delete locally stored subscriptions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Local Subscription Data"
+          }
+        }
+      }
+    },
+    "settings.subscriptions.localData.delete.confirmation.action" : {
+      "comment" : "Confirmation action for deleting local subscriptions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
+    "settings.subscriptions.localData.delete.confirmation.message" : {
+      "comment" : "Message explaining what deleting local subscriptions does",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Removes subscriptions stored on this device and synced with iCloud. Subscriptions on your Invidious or Piped account are not affected."
+          }
+        }
+      }
+    },
+    "settings.subscriptions.localData.delete.confirmation.title %lld" : {
+      "comment" : "Confirmation title for deleting local subscriptions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete %lld local subscriptions?"
+          }
+        }
+      }
+    },
+    "settings.subscriptions.localData.deleted.title" : {
+      "comment" : "Toast shown after local subscriptions were deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local Subscriptions Deleted"
+          }
+        }
+      }
+    },
+    "settings.subscriptions.localData.footer %lld" : {
+      "comment" : "Footer showing how many subscriptions are stored locally",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld subscriptions are stored locally on this device. They are not used while a server account is selected."
+          }
+        }
+      }
+    },
+    "settings.subscriptions.localData.title" : {
+      "comment" : "Header for local subscription data section",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local Data"
+          }
+        }
+      }
+    },
     "settings.subscriptions.title" : {
       "comment" : "Title for subscriptions settings section",
       "localizations" : {
@@ -15092,6 +15245,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Background Color"
+          }
+        }
+      }
+    },
+    "settings.subtitles.backgroundOpacity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Background Opacity"
           }
         }
       }
@@ -15132,6 +15295,96 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bottom Margin: %lld%%"
+          }
+        }
+      }
+    },
+    "settings.subtitles.color.black" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Black"
+          }
+        }
+      }
+    },
+    "settings.subtitles.color.blue" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blue"
+          }
+        }
+      }
+    },
+    "settings.subtitles.color.cyan" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cyan"
+          }
+        }
+      }
+    },
+    "settings.subtitles.color.green" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Green"
+          }
+        }
+      }
+    },
+    "settings.subtitles.color.magenta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Magenta"
+          }
+        }
+      }
+    },
+    "settings.subtitles.color.orange" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orange"
+          }
+        }
+      }
+    },
+    "settings.subtitles.color.red" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Red"
+          }
+        }
+      }
+    },
+    "settings.subtitles.color.white" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "White"
+          }
+        }
+      }
+    },
+    "settings.subtitles.color.yellow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yellow"
           }
         }
       }
@@ -17475,6 +17728,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Subtitles"
+          }
+        }
+      }
+    },
+    "stream.subtitles.loadFromFile" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Load subtitle from file…"
+          }
+        }
+      }
+    },
+    "stream.subtitles.loadFromFile.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a subtitle file"
           }
         }
       }

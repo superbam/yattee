@@ -107,6 +107,77 @@ struct URLRouterTests {
         }
     }
 
+    // MARK: - Timestamp Parsing Tests
+
+    @Test("Parse timestamp from youtu.be short URL")
+    func timestampFromShortURL() {
+        let url = URL(string: "https://youtu.be/GBimVR2VBQU?t=17097")!
+        #expect(router.parseTimestamp(url) == 17097)
+    }
+
+    @Test("Parse compound timestamp value")
+    func compoundTimestampValue() {
+        #expect(URLRouter.parseTimestampValue("1h2m3s") == 3723)
+        #expect(URLRouter.parseTimestampValue("2m30s") == 150)
+        #expect(URLRouter.parseTimestampValue("90s") == 90)
+        #expect(URLRouter.parseTimestampValue("90.5") == 90.5)
+    }
+
+    @Test("Reject non-finite and negative plain timestamp values")
+    func rejectInvalidPlainTimestampValues() {
+        // Plain numeric values that are accepted by TimeInterval(_:) but are not
+        // valid seek targets must return nil rather than poisoning the player.
+        #expect(URLRouter.parseTimestampValue("inf") == nil)
+        #expect(URLRouter.parseTimestampValue("infinity") == nil)
+        #expect(URLRouter.parseTimestampValue("nan") == nil)
+        #expect(URLRouter.parseTimestampValue("-5") == nil)
+        // Valid plain seconds still parse.
+        #expect(URLRouter.parseTimestampValue("0") == 0)
+        #expect(URLRouter.parseTimestampValue("90") == 90)
+        #expect(URLRouter.parseTimestampValue("90.5") == 90.5)
+    }
+
+    // MARK: - Share Extension Wrapper Tests
+
+    @Test("Unwrap yattee://open wrapper to inner URL with timestamp")
+    func unwrapOpenWrapper() {
+        // Share extension percent-encoding leaves ?, /, : intact - this is the literal form delivered
+        let wrapper = URL(string: "yattee://open?url=https://youtu.be/GBimVR2VBQU?t=17097")!
+        let inner = router.unwrapped(wrapper)
+
+        #expect(inner.absoluteString == "https://youtu.be/GBimVR2VBQU?t=17097")
+        #expect(router.parseTimestamp(inner) == 17097)
+
+        // Unwrapped URL still routes to the right video
+        if case .video(let source, _) = router.route(inner), case .id(let videoID) = source {
+            #expect(videoID.videoID == "GBimVR2VBQU")
+        } else {
+            Issue.record("Expected video destination")
+        }
+    }
+
+    @Test("Unwrap wrapper with ampersand timestamp form")
+    func unwrapOpenWrapperAmpersandForm() {
+        let wrapper = URL(string: "yattee://open?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=120")!
+        let inner = router.unwrapped(wrapper)
+
+        #expect(router.parseTimestamp(inner) == 120)
+        if case .video(let source, _) = router.route(inner), case .id(let videoID) = source {
+            #expect(videoID.videoID == "dQw4w9WgXcQ")
+        } else {
+            Issue.record("Expected video destination")
+        }
+    }
+
+    @Test("Unwrapped returns non-wrapper URLs unchanged")
+    func unwrapPassthrough() {
+        let plain = URL(string: "https://youtu.be/dQw4w9WgXcQ?t=42")!
+        #expect(router.unwrapped(plain) == plain)
+
+        let scheme = URL(string: "yattee://subscriptions")!
+        #expect(router.unwrapped(scheme) == scheme)
+    }
+
     // MARK: - PeerTube URL Tests
 
     @Test("Parse PeerTube /w/ video URL")
@@ -213,6 +284,26 @@ struct URLRouterTests {
             #expect(url == dailymotionURL)
         } else {
             Issue.record("Expected externalVideo destination for Dailymotion")
+        }
+    }
+
+    // MARK: - External Host Exclusion Tests
+
+    @Test("www.duckduckgo.com is excluded from external video routing")
+    func wwwDuckDuckGoExcluded() {
+        let url = URL(string: "https://www.duckduckgo.com/?q=cat+videos")!
+        let destination = router.route(url)
+        if case .externalVideo = destination {
+            Issue.record("www.duckduckgo.com must not route to externalVideo; yt-dlp extraction should not run for a search engine")
+        }
+    }
+
+    @Test("duckduckgo.com bare host remains excluded from external video")
+    func duckDuckGoBareExcluded() {
+        let url = URL(string: "https://duckduckgo.com/?q=test")!
+        let destination = router.route(url)
+        if case .externalVideo = destination {
+            Issue.record("duckduckgo.com must not route to externalVideo; yt-dlp extraction should not run for a search engine")
         }
     }
 

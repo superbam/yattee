@@ -532,9 +532,7 @@ private struct PipedVideo: Decodable, Sendable {
             publishedText: uploadedDate,
             viewCount: views.map { Int($0) },
             likeCount: nil,
-            thumbnails: thumbnail.flatMap { URL(string: $0) }.map {
-                [Thumbnail(url: $0, quality: .high)]
-            } ?? [],
+            thumbnails: Thumbnail.fallbackChain(for: thumbnail.flatMap { URL(string: $0) }),
             isLive: duration == -1,
             isUpcoming: false,
             scheduledStartTime: nil,
@@ -591,7 +589,7 @@ private struct PipedStreamResponse: Decodable, Sendable {
         let thumbnails: [Thumbnail] = {
             if !resolvedVideoId.isEmpty,
                let url = URL(string: "https://i.ytimg.com/vi/\(resolvedVideoId)/maxresdefault.jpg") {
-                return [Thumbnail(url: url, quality: .maxres)]
+                return Thumbnail.fallbackChain(for: url)
             }
             // Fallback to proxy URL if video ID not available
             if let proxyURL = thumbnailUrl.flatMap({ URL(string: $0) }) {
@@ -675,12 +673,14 @@ private struct PipedVideoStream: Decodable, Sendable {
             resolution = nil
         }
 
+        let audioCodec: String? = (videoOnly ?? true) ? nil : "aac"
+
         return Stream(
             url: streamUrl,
             resolution: resolution,
             format: format ?? "unknown",
             videoCodec: codec,
-            audioCodec: nil,
+            audioCodec: audioCodec,
             bitrate: bitrate,
             fileSize: contentLength,
             isAudioOnly: false,
@@ -772,9 +772,7 @@ private struct PipedSearchItem: Decodable, Sendable {
             publishedText: uploadedDate,
             viewCount: views.map { Int($0) },
             likeCount: nil,
-            thumbnails: thumbnail.flatMap { URL(string: $0) }.map {
-                [Thumbnail(url: $0, quality: .high)]
-            } ?? [],
+            thumbnails: Thumbnail.fallbackChain(for: thumbnail.flatMap { URL(string: $0) }),
             isLive: duration == -1,
             isUpcoming: false,
             scheduledStartTime: nil,

@@ -232,6 +232,7 @@ struct VideoInfoView: View {
     /// and resume setting is continueWatching or ask.
     private var playButtonLabel: String {
         guard let video = displayedVideo,
+              !video.isLive,
               let savedProgress = dataManager?.watchProgress(for: video.id.videoID),
               savedProgress >= 5,
               video.duration > 0,
@@ -651,9 +652,9 @@ struct VideoInfoView: View {
     @ViewBuilder
     private func tvOSThumbnail(for video: Video) -> some View {
         let deArrowURL = appEnvironment?.deArrowBrandingProvider.thumbnailURL(for: video)
-        let thumbnailURL = deArrowURL ?? video.bestThumbnail?.url
+        let thumbnailURLs = [deArrowURL].compactMap { $0 } + video.thumbnailURLsByQuality
 
-        LazyImage(url: thumbnailURL) { state in
+        FallbackLazyImage(urls: thumbnailURLs) { state in
             if let image = state.image {
                 image
                     .resizable()
@@ -815,7 +816,7 @@ struct VideoInfoView: View {
     @ViewBuilder
     private var blurredThumbnailBackground: some View {
         BlurredImageBackground(
-            url: displayedVideo.flatMap { appEnvironment?.deArrowBrandingProvider.thumbnailURL(for: $0) } ?? displayedVideo?.bestThumbnail?.url,
+            url: displayedVideo.flatMap { appEnvironment?.deArrowBrandingProvider.thumbnailURL(for: $0) } ?? displayedVideo?.reliableThumbnailURL,
             videoID: displayedVideo?.id.videoID,
             blurRadius: BlurredImageBackground.platformBlurRadius,
             scale: 1.8,
@@ -948,12 +949,11 @@ struct VideoInfoView: View {
     private func videoCard(for video: Video, thumbnailFrom: Video? = nil, authorFrom: Video? = nil, isLoadingMore: Bool, showTitle: Bool, isCurrent: Bool) -> some View {
         let thumbnailSource = thumbnailFrom ?? video
         let deArrowURL = appEnvironment?.deArrowBrandingProvider.thumbnailURL(for: thumbnailSource)
-        let bestThumb = thumbnailSource.bestThumbnail
-        let thumbnailURL = deArrowURL ?? bestThumb?.url
+        let thumbnailURLs = [deArrowURL].compactMap { $0 } + thumbnailSource.thumbnailURLsByQuality
         return VStack(spacing: 12) {
             // Thumbnail with loading overlay
             ZStack {
-                LazyImage(url: thumbnailURL) { state in
+                FallbackLazyImage(urls: thumbnailURLs) { state in
                     if let image = state.image {
                         image
                             .resizable()
@@ -2273,6 +2273,13 @@ struct VideoInfoView: View {
     /// Play the video, respecting the user's resume action setting for partially watched videos.
     private func playVideo() {
         guard let video = displayedVideo, let env = appEnvironment else { return }
+
+        // Live streams have no fixed timeline, so a resume position is meaningless -
+        // never ask, always join at the live edge.
+        guard !video.isLive else {
+            playVideoWithStartTime(0)
+            return
+        }
 
         Task {
             // Resolve the resume position: Invidious server as source of truth

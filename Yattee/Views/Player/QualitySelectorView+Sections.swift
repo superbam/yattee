@@ -184,10 +184,15 @@ extension QualitySelectorView {
         if format == .hls || format == .dash {
             return format == .hls ? "HLS" : "DASH"
         }
-        return stream.qualityLabel
+        return displayStream(for: stream).qualityLabel
     }
 
     private var currentAudioDisplayValue: String {
+        if embeddedAudioTracks.count > 1,
+           let trackID = currentEmbeddedAudioTrackID,
+           let track = embeddedAudioTracks.first(where: { $0.trackID == trackID }) {
+            return track.displayName
+        }
         if isCurrentStreamMuxed {
             return String(localized: "player.quality.audioFromVideo.short")
         }
@@ -198,7 +203,11 @@ extension QualitySelectorView {
     }
 
     private var currentSubtitlesDisplayValue: String {
-        currentCaption?.displayName ?? String(localized: "stream.subtitles.off")
+        if let trackID = currentEmbeddedSubtitleTrackID,
+           let track = embeddedSubtitleTracks.first(where: { $0.trackID == trackID }) {
+            return track.displayName
+        }
+        return currentCaption?.displayName ?? String(localized: "stream.subtitles.off")
     }
 
     // MARK: - Detail Content Views
@@ -686,6 +695,37 @@ extension QualitySelectorView {
         }
     }
 
+    /// A media-source Stream (local folder, WebDAV, SMB) carries no
+    /// resolution/codec/fps metadata (`MediaFile.toStream` cannot know them
+    /// before demux), which would label the row "Unknown". Once mpv reports
+    /// the loaded file's video track, fill those fields for display. Gated to
+    /// local files and the currently playing stream — the track info describes
+    /// whatever mpv has loaded. The enriched copy is display-only — selection
+    /// and tap handling keep using the original stream (compared by URL).
+    func displayStream(for stream: Stream) -> Stream {
+        guard stream.resolution == nil,
+              !stream.isAudioOnly,
+              stream.url.isFileURL || stream.url == currentStream?.url,
+              let track = embeddedVideoTrack,
+              let width = track.width,
+              let height = track.height else {
+            return stream
+        }
+        return Stream(
+            url: stream.url,
+            resolution: StreamResolution(width: width, height: height),
+            format: stream.format,
+            videoCodec: track.codec ?? stream.videoCodec,
+            audioCodec: stream.audioCodec,
+            bitrate: stream.bitrate,
+            fileSize: stream.fileSize,
+            isLive: stream.isLive,
+            mimeType: stream.mimeType,
+            httpHeaders: stream.httpHeaders,
+            fps: track.fps.map { Int($0.rounded()) }
+        )
+    }
+
     @ViewBuilder
     private func videoStreamRow(_ stream: Stream) -> some View {
         let isDownloadedStream: Bool = stream.url.isFileURL
@@ -693,14 +733,18 @@ extension QualitySelectorView {
             ? stream.url == currentStream?.url
             : stream.url == selectedVideoStream?.url
         let isPreferredQuality: Bool = stream.resolution == preferredQuality.maxResolution
+        // Metadata-less media-source streams get resolution/codec/fps filled
+        // from the mpv-reported video track for display; the warning must use
+        // the enriched codec too or a nil codec reads as software-decoded
+        let display: Stream = displayStream(for: stream)
 
         VideoStreamRowView(
-            stream: stream,
+            stream: display,
             isSelected: isSelected,
             isPreferredQuality: isPreferredQuality,
             isDownloaded: isDownloadedStream,
             showAdvancedDetails: showAdvancedStreamDetails,
-            requiresSoftwareDecode: !stream.isMuxed && requiresSoftwareDecode(stream.videoCodec),
+            requiresSoftwareDecode: !display.isMuxed && display.videoCodec != nil && requiresSoftwareDecode(display.videoCodec),
             onTap: {
                 handleVideoStreamTap(stream, isDownloaded: isDownloadedStream)
             }
@@ -741,7 +785,9 @@ extension QualitySelectorView {
 
     @ViewBuilder
     var audioSectionContent: some View {
-        if isCurrentStreamMuxed {
+        if embeddedAudioTracks.count > 1 {
+            embeddedAudioTracksContent
+        } else if isCurrentStreamMuxed {
             VStack(spacing: 0) {
                 HStack {
                     Image(systemName: "info.circle")
@@ -776,6 +822,44 @@ extension QualitySelectorView {
             .cardBackground()
             #endif
         }
+    }
+
+    /// Embedded (in-container) audio tracks, switched live via mpv `aid`.
+    @ViewBuilder
+    private var embeddedAudioTracksContent: some View {
+        #if os(tvOS)
+        VStack(spacing: 8) {
+            ForEach(embeddedAudioTracks) { track in
+                embeddedAudioTrackRow(track)
+            }
+        }
+        #else
+        VStack(spacing: 0) {
+            ForEach(Array(embeddedAudioTracks.enumerated()), id: \.element.id) { index, track in
+                if index > 0 {
+                    Divider()
+                }
+                embeddedAudioTrackRow(track)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+            }
+        }
+        .cardBackground()
+        #endif
+    }
+
+    @ViewBuilder
+    private func embeddedAudioTrackRow(_ track: MPVTrack) -> some View {
+        EmbeddedTrackRowView(
+            track: track,
+            isSelected: track.trackID == currentEmbeddedAudioTrackID,
+            isPreferred: track.matchesLanguage(preferredAudioLanguage),
+            showAdvancedDetails: showAdvancedStreamDetails,
+            onTap: {
+                onEmbeddedAudioTrackSelected(track.trackID)
+                performDismiss()
+            }
+        )
     }
 
     @ViewBuilder
@@ -816,12 +900,16 @@ extension QualitySelectorView {
         VStack(spacing: 8) {
             CaptionRowView(
                 caption: nil,
-                isSelected: currentCaption == nil,
+                isSelected: currentCaption == nil && currentEmbeddedSubtitleTrackID == nil,
                 isPreferred: false,
                 onTap: {
                     handleCaptionTap(nil)
                 }
             )
+
+            ForEach(embeddedSubtitleTracks) { track in
+                embeddedSubtitleTrackRow(track)
+            }
 
             ForEach(sortedCaptions) { caption in
                 CaptionRowView(
@@ -838,7 +926,7 @@ extension QualitySelectorView {
         VStack(spacing: 0) {
             CaptionRowView(
                 caption: nil,
-                isSelected: currentCaption == nil,
+                isSelected: currentCaption == nil && currentEmbeddedSubtitleTrackID == nil,
                 isPreferred: false,
                 onTap: {
                     handleCaptionTap(nil)
@@ -846,6 +934,14 @@ extension QualitySelectorView {
             )
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
+
+            ForEach(embeddedSubtitleTracks) { track in
+                Divider()
+
+                embeddedSubtitleTrackRow(track)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+            }
 
             ForEach(sortedCaptions) { caption in
                 Divider()
@@ -861,9 +957,69 @@ extension QualitySelectorView {
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
             }
+
+            if canLoadExternalSubtitles {
+                Divider()
+
+                loadSubtitleFileRow
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+            }
         }
         .cardBackground()
         #endif
+    }
+
+    #if !os(tvOS)
+    /// Row that opens a file picker to load an external subtitle file into
+    /// the current media-source playback.
+    private var loadSubtitleFileRow: some View {
+        Button {
+            #if os(iOS)
+            showingSubtitleFilePicker = true
+            #elseif os(macOS)
+            SubtitleFilePanel.present { url in
+                handlePickedSubtitleFile(url)
+            }
+            #endif
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "folder.badge.plus")
+                    .foregroundStyle(.secondary)
+                Text("stream.subtitles.loadFromFile")
+                    .font(.headline)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    func handlePickedSubtitleFile(_ url: URL) {
+        appEnvironment?.playerService.loadExternalSubtitleFile(from: url)
+        performDismiss()
+    }
+    #endif
+
+    @ViewBuilder
+    private func embeddedSubtitleTrackRow(_ track: MPVTrack) -> some View {
+        EmbeddedTrackRowView(
+            track: track,
+            isSelected: track.trackID == currentEmbeddedSubtitleTrackID,
+            isPreferred: track.matchesLanguage(preferredSubtitlesLanguage),
+            showAdvancedDetails: showAdvancedStreamDetails,
+            onTap: {
+                // Re-tapping the selected track turns subtitles off (parity
+                // with external caption rows)
+                if track.trackID == currentEmbeddedSubtitleTrackID {
+                    onEmbeddedSubtitleTrackSelected(nil)
+                } else {
+                    onEmbeddedSubtitleTrackSelected(track.trackID)
+                }
+                performDismiss()
+            }
+        )
     }
 
     private func isCaptionPreferred(_ caption: Caption) -> Bool {
@@ -872,6 +1028,8 @@ extension QualitySelectorView {
     }
 
     private func handleCaptionTap(_ caption: Caption?) {
+        // Note: the Off row needs no embedded-track handling — caption "off"
+        // sets sid=no and clears the embedded intent in PlayerService.
         if caption?.id == currentCaption?.id && caption != nil {
             onCaptionSelected(nil)
         } else {

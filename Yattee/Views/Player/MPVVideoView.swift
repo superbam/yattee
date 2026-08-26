@@ -261,6 +261,17 @@ struct MPVVideoView: View {
                 Task {
                     await playerService.selectStreamManually(stream, audioStream: audioStream)
                 }
+            },
+            embeddedAudioTracks: playerService.embeddedAudioTracks,
+            embeddedSubtitleTracks: playerService.embeddedSubtitleTracks,
+            currentEmbeddedAudioTrackID: playerService.selectedEmbeddedAudioTrackID,
+            currentEmbeddedSubtitleTrackID: playerService.selectedEmbeddedSubtitleTrackID,
+            embeddedVideoTrack: playerService.primaryEmbeddedVideoTrack,
+            onEmbeddedAudioTrackSelected: { trackID in
+                playerService.selectEmbeddedAudioTrack(trackID)
+            },
+            onEmbeddedSubtitleTrackSelected: { trackID in
+                playerService.selectEmbeddedSubtitleTrack(trackID)
             }
         )
         #elseif os(macOS)

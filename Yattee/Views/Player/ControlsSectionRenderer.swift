@@ -125,7 +125,7 @@ struct ControlsSectionRenderer: View {
         case .fullscreen:
             if actions.shouldShowFullscreenButton {
                 controlButton(systemImage: actions.fullscreenIcon) {
-                    handleFullscreenTap()
+                    actions.performFullscreenTap()
                 }
                 .disabled(isLocked)
                 .opacity(isLocked ? 0.5 : 1.0)
@@ -818,26 +818,6 @@ struct ControlsSectionRenderer: View {
         .animation(.easeInOut(duration: 0.2), value: isBrightnessExpanded)
     }
 
-    // MARK: - Fullscreen Handling
-
-    private func handleFullscreenTap() {
-        let isActualWidescreenLayout = actions.isWideScreenLayout && actions.onTogglePanel != nil
-
-        if actions.isIPad {
-            // iPad: always toggle details visibility
-            actions.onToggleDetailsVisibility?()
-        } else if isActualWidescreenLayout && actions.isFullscreen && !actions.isWidescreenVideo {
-            // iPhone in landscape with portrait video fullscreen: rotate back to portrait
-            actions.onToggleFullscreen?()
-        } else if !actions.isWidescreenVideo {
-            // iPhone portrait video in portrait layout: toggle details visibility
-            actions.onToggleDetailsVisibility?()
-        } else {
-            // iPhone with widescreen video: rotate orientation
-            actions.onToggleFullscreen?()
-        }
-    }
-
     // MARK: - Transport State
 
     private var isTransportDisabled: Bool {
@@ -921,8 +901,9 @@ struct ControlsSectionRenderer: View {
 
     @ViewBuilder
     private var captionsButton: some View {
-        if actions.hasCaptions, actions.onCaptionSelected != nil {
-            controlButton(systemImage: actions.currentCaption != nil ? "captions.bubble.fill" : "captions.bubble") {
+        if actions.hasCaptions || actions.canLoadExternalSubtitles, actions.onCaptionSelected != nil {
+            let subtitlesActive = actions.currentCaption != nil || actions.currentEmbeddedSubtitleTrackID != nil
+            controlButton(systemImage: subtitlesActive ? "captions.bubble.fill" : "captions.bubble") {
                 actions.onShowCaptionsSelector?()
             }
         }

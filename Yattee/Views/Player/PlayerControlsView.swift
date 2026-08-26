@@ -91,6 +91,16 @@ struct PlayerControlsView: View {
     var onCaptionSelected: ((Caption?) -> Void)? = nil
     /// Callback when stream is selected (for quality selector integration)
     var onStreamSelected: ((Stream, Stream?) -> Void)? = nil
+    /// Embedded (in-container) tracks reported by mpv for the loaded file
+    var embeddedAudioTracks: [MPVTrack] = []
+    var embeddedSubtitleTracks: [MPVTrack] = []
+    var currentEmbeddedAudioTrackID: Int? = nil
+    var currentEmbeddedSubtitleTrackID: Int? = nil
+    var embeddedVideoTrack: MPVTrack? = nil
+    /// Callback when an embedded audio track is selected
+    var onEmbeddedAudioTrackSelected: ((Int) -> Void)? = nil
+    /// Callback when an embedded subtitle track is selected (nil = off)
+    var onEmbeddedSubtitleTrackSelected: ((Int?) -> Void)? = nil
 
     /// Current panscan value (0.0 = fit, 1.0 = fill)
     var panscanValue: Double = 0.0
@@ -285,9 +295,14 @@ struct PlayerControlsView: View {
             currentCaption: currentCaption,
             initialTab: .subtitles,
             showTabPicker: false,
+            embeddedSubtitleTracks: embeddedSubtitleTracks,
+            currentEmbeddedSubtitleTrackID: currentEmbeddedSubtitleTrackID,
             onStreamSelected: { _, _ in },
             onCaptionSelected: { caption in
                 onCaptionSelected?(caption)
+            },
+            onEmbeddedSubtitleTrackSelected: { trackID in
+                onEmbeddedSubtitleTrackSelected?(trackID)
             }
         )
     }
@@ -301,6 +316,7 @@ struct PlayerControlsView: View {
             currentAudioStream: currentAudioStream,
             initialTab: .video,
             showTabPicker: false,
+            embeddedVideoTrack: embeddedVideoTrack,
             onStreamSelected: { stream, audioStream in
                 onStreamSelected?(stream, audioStream)
             },
@@ -317,10 +333,15 @@ struct PlayerControlsView: View {
             currentAudioStream: currentAudioStream,
             initialTab: .audio,
             showTabPicker: false,
+            embeddedAudioTracks: embeddedAudioTracks,
+            currentEmbeddedAudioTrackID: currentEmbeddedAudioTrackID,
             onStreamSelected: { stream, audioStream in
                 onStreamSelected?(stream, audioStream)
             },
-            onCaptionSelected: { _ in }
+            onCaptionSelected: { _ in },
+            onEmbeddedAudioTrackSelected: { trackID in
+                onEmbeddedAudioTrackSelected?(trackID)
+            }
         )
     }
 
@@ -379,6 +400,10 @@ struct PlayerControlsView: View {
             availableStreams: availableStreams,
             currentStream: currentStream,
             currentAudioStream: currentAudioStream,
+            embeddedAudioTracks: embeddedAudioTracks,
+            embeddedSubtitleTracks: embeddedSubtitleTracks,
+            currentEmbeddedAudioTrackID: currentEmbeddedAudioTrackID,
+            currentEmbeddedSubtitleTrackID: currentEmbeddedSubtitleTrackID,
             panscanValue: panscanValue,
             isPanscanAllowed: isPanscanAllowed,
             isAutoPlayNextEnabled: appEnvironment?.settingsManager.queueAutoPlayNext ?? true,
@@ -1195,8 +1220,8 @@ struct PlayerControlsView: View {
                 }
 
             case .toggleFullscreen:
-                // Execute immediately
-                onToggleFullscreen?()
+                // Execute immediately, using the same decision logic as the fullscreen button
+                controlsActions.performFullscreenTap()
 
             case .togglePiP:
                 // Execute immediately

@@ -170,6 +170,13 @@ struct TappableVideoModifier: ViewModifier {
     private func playVideoAndQueueRest() {
         guard let env = appEnvironment else { return }
 
+        // Live streams have no fixed timeline, so a resume position is meaningless -
+        // never ask, always join at the live edge.
+        guard !video.isLive else {
+            playVideoWithStartTime(0)
+            return
+        }
+
         Task {
             // Determine the saved progress: prefer explicitly passed startTime
             // (e.g. a deep-linked timestamp), otherwise resolve the resume

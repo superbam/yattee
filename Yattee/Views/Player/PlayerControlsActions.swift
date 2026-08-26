@@ -76,6 +76,12 @@ struct PlayerControlsActions {
     /// Current audio stream
     let currentAudioStream: Stream?
 
+    /// Embedded (in-container) tracks reported by mpv for the loaded file
+    var embeddedAudioTracks: [MPVTrack] = []
+    var embeddedSubtitleTracks: [MPVTrack] = []
+    var currentEmbeddedAudioTrackID: Int? = nil
+    var currentEmbeddedSubtitleTrackID: Int? = nil
+
     #if os(iOS)
     /// Current panscan value (0.0 = fit, 1.0 = fill)
     let panscanValue: Double
@@ -217,9 +223,19 @@ struct PlayerControlsActions {
         return !video.isFromLocalFolder
     }
 
-    /// Whether captions are available
+    /// Whether captions are available (external files or embedded tracks)
     var hasCaptions: Bool {
-        !availableCaptions.isEmpty
+        !availableCaptions.isEmpty || !embeddedSubtitleTracks.isEmpty
+    }
+
+    /// Whether an external subtitle file can be loaded: media-source playback
+    /// (local folder/SMB/WebDAV) on platforms with a file picker.
+    var canLoadExternalSubtitles: Bool {
+        #if os(tvOS)
+        return false
+        #else
+        return currentVideo?.isFromMediaSource == true
+        #endif
     }
 
     /// Whether chapters are available
@@ -261,8 +277,28 @@ struct PlayerControlsActions {
         }
     }
 
+    /// Shared fullscreen-tap decision used by the fullscreen button and tap gestures.
+    /// Keep in sync with `willRotateOnFullscreenToggle` (icon mirror of this logic).
+    func performFullscreenTap() {
+        let isActualWidescreenLayout = isWideScreenLayout && onTogglePanel != nil
+
+        if isIPad {
+            // iPad: always toggle details visibility
+            onToggleDetailsVisibility?()
+        } else if isActualWidescreenLayout && isFullscreen && !isWidescreenVideo {
+            // iPhone in landscape with portrait video fullscreen: rotate back to portrait
+            onToggleFullscreen?()
+        } else if !isWidescreenVideo {
+            // iPhone portrait video in portrait layout: toggle details visibility
+            onToggleDetailsVisibility?()
+        } else {
+            // iPhone with widescreen video: rotate orientation
+            onToggleFullscreen?()
+        }
+    }
+
     /// Whether tapping fullscreen will cause device rotation.
-    /// Mirrors the logic in ControlsSectionRenderer.handleFullscreenTap()
+    /// Mirrors the logic in `performFullscreenTap()`
     var willRotateOnFullscreenToggle: Bool {
         // iPad never rotates via fullscreen button
         guard !isIPad else { return false }

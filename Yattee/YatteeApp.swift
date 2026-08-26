@@ -546,6 +546,9 @@ struct YatteeApp: App {
     /// Handle incoming deep link URLs.
     private func handleDeepLink(_ url: URL) {
         let router = URLRouter()
+        // Resolve yattee://open?url=… wrappers first so timestamp parsing and
+        // sheet prefill below see the real link, not the wrapper.
+        let url = router.unwrapped(url)
         guard let destination = router.route(url) else { return }
 
         let action = appEnvironment.settingsManager.defaultLinkAction
@@ -717,7 +720,7 @@ struct YatteeApp: App {
             )
             LoggingService.shared.info("Deep link play: fetched video, opening player", category: .general)
             appEnvironment.toastManager.dismiss(id: toastID)
-            appEnvironment.playerService.openVideo(video, startTime: startTime)
+            appEnvironment.playerService.openVideo(video, startTime: startTime, forceStartTime: startTime != nil)
         } catch {
             LoggingService.shared.error(
                 "Deep link play: video fetch failed (\(error.localizedDescription)), falling back to info view",

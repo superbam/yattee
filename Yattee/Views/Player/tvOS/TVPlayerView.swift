@@ -6,6 +6,7 @@
 //
 
 #if os(tvOS)
+import NukeUI
 import SwiftUI
 
 /// Focus targets for tvOS player controls navigation.
@@ -167,6 +168,11 @@ struct TVPlayerView: View {
                 },
                 currentRate: playerState?.rate ?? .x1,
                 isAudioMode: appEnvironment?.settingsManager.audioOnlyModeEnabled ?? false,
+                embeddedAudioTracks: playerService.embeddedAudioTracks,
+                embeddedSubtitleTracks: playerService.embeddedSubtitleTracks,
+                currentEmbeddedAudioTrackID: playerService.selectedEmbeddedAudioTrackID,
+                currentEmbeddedSubtitleTrackID: playerService.selectedEmbeddedSubtitleTrackID,
+                embeddedVideoTrack: playerService.primaryEmbeddedVideoTrack,
                 onStreamSelected: { stream, audioStream in
                     switchToStream(stream, audioStream: audioStream)
                 },
@@ -182,6 +188,12 @@ struct TVPlayerView: View {
                     Task {
                         await playerService.switchToOnlineStream(stream, audioStream: audioStream)
                     }
+                },
+                onEmbeddedAudioTrackSelected: { trackID in
+                    playerService.selectEmbeddedAudioTrack(trackID)
+                },
+                onEmbeddedSubtitleTrackSelected: { trackID in
+                    playerService.selectEmbeddedSubtitleTrack(trackID)
                 },
                 onRateChanged: { rate in
                     playerState?.rate = rate
@@ -633,13 +645,15 @@ struct TVPlayerView: View {
             // Thumbnail for audio-only playback and the pre-backend loading state
             if isAudioOnly || !hasBackend,
                let video = playerState?.currentVideo,
-               let thumbnailURL = video.bestThumbnail?.url {
-                AsyncImage(url: thumbnailURL) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } placeholder: {
-                    Color.black
+               !video.thumbnailURLsByQuality.isEmpty {
+                FallbackLazyImage(urls: video.thumbnailURLsByQuality) { state in
+                    if let image = state.image {
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    } else {
+                        Color.black
+                    }
                 }
                 .allowsHitTesting(false)
             }
@@ -1030,6 +1044,11 @@ struct TVPlayerView: View {
         stopControlsTimer()
         withAnimation(.easeOut(duration: 0.25)) {
             controlsVisible = false
+        }
+
+        // Repeat one: PlayerService restarts the video itself - no countdown, no replay controls
+        if playerState?.queueMode == .repeatOne {
+            return
         }
 
         // Check if autoplay is enabled and there's a next video
