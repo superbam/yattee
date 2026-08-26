@@ -983,7 +983,7 @@ struct TVPlayerView: View {
             // subsequent focus-loss path sees cleared scrub state and no-ops.
             cancelScrubTrigger = UUID()
             hideControls()
-        } else if controlsVisible {
+        } else if controlsVisible && playerState?.playbackState != .ended {
             // Fifth: hide controls
             hideControls()
         } else if appEnvironment?.settingsManager.tvOSMenuButtonClosesVideo == true {
