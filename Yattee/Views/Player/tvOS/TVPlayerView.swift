@@ -39,6 +39,16 @@ struct TVPlayerView: View {
     /// Whether controls overlay is visible.
     @State private var controlsVisible = true
 
+    /// Whether the currently-visible controls are specifically the terminal
+    /// "replay" screen (video ended, nothing auto-playing next) rather than
+    /// controls shown for some other reason while still `.ended` - e.g. after
+    /// closing the queue/quality/details panel. Only this state lets Menu
+    /// exit on a single press instead of hiding controls first: there's
+    /// nothing to reveal by hiding them. Opening any panel means the user is
+    /// doing something else, so it's cleared there and the normal two-step
+    /// (hide, then exit) applies again.
+    @State private var isShowingEndedReplayScreen = false
+
     /// Timer for auto-hiding controls.
     @State private var controlsHideTimer: Timer?
 
@@ -408,8 +418,11 @@ struct TVPlayerView: View {
         }
         // Start auto-hide timer when playback starts, handle video ended
         .onChange(of: playerState?.playbackState) { _, newState in
-            if newState == .playing && controlsVisible && !isScrubbing {
-                startControlsTimer()
+            if newState == .playing {
+                isShowingEndedReplayScreen = false
+                if controlsVisible && !isScrubbing {
+                    startControlsTimer()
+                }
             } else if newState == .ended {
                 handleVideoEnded()
             } else if case .failed = newState {
@@ -725,6 +738,7 @@ struct TVPlayerView: View {
     private func showDetailsPanel(tab: TVDetailsTab = .info) {
         stopControlsTimer()
         detailsPanelInitialTab = tab
+        isShowingEndedReplayScreen = false
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
             isDetailsPanelVisible = true
             controlsVisible = false
@@ -735,6 +749,7 @@ struct TVPlayerView: View {
 
     private func showQualitySheet() {
         stopControlsTimer()
+        isShowingEndedReplayScreen = false
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
             showingQualitySheet = true
             controlsVisible = false
@@ -750,6 +765,7 @@ struct TVPlayerView: View {
 
     private func showQueueSheet() {
         stopControlsTimer()
+        isShowingEndedReplayScreen = false
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
             showingQueueSheet = true
             controlsVisible = false
@@ -781,6 +797,7 @@ struct TVPlayerView: View {
     private func showDebugOverlay() {
         stopControlsTimer()
         startDebugUpdates()
+        isShowingEndedReplayScreen = false
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
             isDebugOverlayVisible = true
             controlsVisible = false
@@ -997,7 +1014,7 @@ struct TVPlayerView: View {
             // subsequent focus-loss path sees cleared scrub state and no-ops.
             cancelScrubTrigger = UUID()
             hideControls()
-        } else if controlsVisible && playerState?.playbackState != .ended {
+        } else if controlsVisible && !isShowingEndedReplayScreen {
             // Fifth: hide controls
             hideControls()
         } else if appEnvironment?.settingsManager.tvOSMenuButtonClosesVideo == true {
@@ -1060,6 +1077,7 @@ struct TVPlayerView: View {
         } else {
             // No next video or autoplay disabled - show controls with replay option
             showControls()
+            isShowingEndedReplayScreen = true
         }
     }
 
@@ -1108,8 +1126,11 @@ struct TVPlayerView: View {
     private func cancelAutoplay() {
         stopAutoplayCountdown()
 
-        // Show controls so user can replay or manually navigate
+        // Show controls so user can replay or manually navigate. Cancelling
+        // the countdown lands on the same terminal replay screen as the
+        // no-autoplay case, so it gets the same single-press-exit treatment.
         showControls()
+        isShowingEndedReplayScreen = true
     }
 }
 
