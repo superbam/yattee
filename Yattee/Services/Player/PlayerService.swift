@@ -2880,15 +2880,19 @@ final class PlayerService {
         dataManager.updateWatchProgressLocal(for: video, seconds: state.currentTime, duration: state.duration, isLive: state.isLive)
 
         // Push the position to the Invidious account (debounced internally).
-        invidiousHistorySync?.pushPosition(videoID: video.id.videoID, seconds: state.currentTime)
+        // Live streams have no meaningful resume position - only the local
+        // history entry (above) is worth recording for them.
+        if !state.isLive {
+            invidiousHistorySync?.pushPosition(videoID: video.id.videoID, seconds: state.currentTime)
 
-        // Mark watched on the Invidious account once the configured threshold
-        // is crossed (default 90%), so history isn't gated on literal EOF.
-        if state.duration > 0 {
-            invidiousHistorySync?.markWatchedIfThresholdReached(
-                videoID: video.id.videoID,
-                progress: state.currentTime / state.duration
-            )
+            // Mark watched on the Invidious account once the configured threshold
+            // is crossed (default 90%), so history isn't gated on literal EOF.
+            if state.duration > 0 {
+                invidiousHistorySync?.markWatchedIfThresholdReached(
+                    videoID: video.id.videoID,
+                    progress: state.currentTime / state.duration
+                )
+            }
         }
 
         // Update Handoff activity with current playback time
@@ -2937,7 +2941,10 @@ final class PlayerService {
         dataManager.updateWatchProgress(for: video, seconds: state.currentTime, duration: state.duration, isLive: state.isLive)
 
         // Push the final position to the Invidious account (force past debounce).
-        invidiousHistorySync?.pushPosition(videoID: video.id.videoID, seconds: state.currentTime, force: true)
+        // Live streams have no meaningful resume position.
+        if !state.isLive {
+            invidiousHistorySync?.pushPosition(videoID: video.id.videoID, seconds: state.currentTime, force: true)
+        }
 
         NotificationCenter.default.post(name: .watchHistoryDidChange, object: nil)
     }

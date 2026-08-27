@@ -54,7 +54,12 @@ extension DataManager {
                         newEntry.duration = duration
                     }
                 } else {
-                    newEntry.isLive = true
+                    // Matches the existing-entry branch above: `duration` here
+                    // may be a stale nonzero value from WatchEntry.from(video:),
+                    // which read video.isLive (false in the isLive: override
+                    // case this param exists for) - recordLiveWatch() keeps the
+                    // zeroed-duration invariant consistent regardless.
+                    newEntry.recordLiveWatch()
                 }
                 modelContext.insert(newEntry)
                 save()
@@ -98,7 +103,9 @@ extension DataManager {
                         newEntry.duration = duration
                     }
                 } else {
-                    newEntry.isLive = true
+                    // See updateWatchProgressLocal's identical branch for why
+                    // recordLiveWatch() (not a bare isLive = true) is needed here.
+                    newEntry.recordLiveWatch()
                 }
                 modelContext.insert(newEntry)
                 entry = newEntry
