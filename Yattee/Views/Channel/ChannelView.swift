@@ -30,6 +30,13 @@ struct ChannelView: View {
     @State private var errorMessage: String?
     @State private var subscription: Subscription?
     @State private var isSubscribed = false
+    /// Bumped every time a fresh `isSubscribed` provider check starts; a check
+    /// only applies its result if it's still the most recent one when it
+    /// resolves. Without this, an older check outliving a newer one (e.g. the
+    /// initial load's check still in flight when the user taps Subscribe,
+    /// which starts its own check) can overwrite the correct, fresher result
+    /// with stale data.
+    @State private var subscriptionCheckGeneration = 0
     @State private var showingUnsubscribeConfirmation = false
     @State private var scrollOffset: CGFloat = 0
     @State private var scrollToTop: Bool = false
@@ -2101,8 +2108,13 @@ struct ChannelView: View {
         // corrected by the active provider (server accounts differ from local)
         subscription = appEnvironment.dataManager.subscription(for: channelID)
         isSubscribed = subscription != nil
+        subscriptionCheckGeneration += 1
+        let subscriptionCheckID = subscriptionCheckGeneration
         Task {
-            isSubscribed = await appEnvironment.subscriptionService.isSubscribed(to: channelID)
+            let subscribed = await appEnvironment.subscriptionService.isSubscribed(to: channelID)
+            if subscriptionCheckID == subscriptionCheckGeneration {
+                isSubscribed = subscribed
+            }
         }
 
         // Load cached header data for immediate display
@@ -2216,8 +2228,13 @@ struct ChannelView: View {
                 // Check subscription status using extracted channel ID
                 subscription = appEnvironment.dataManager.subscription(for: fetchedChannel.id.channelID)
                 isSubscribed = subscription != nil
+                subscriptionCheckGeneration += 1
+                let subscriptionCheckID = subscriptionCheckGeneration
                 Task {
-                    isSubscribed = await appEnvironment.subscriptionService.isSubscribed(to: fetchedChannel.id.channelID)
+                    let subscribed = await appEnvironment.subscriptionService.isSubscribed(to: fetchedChannel.id.channelID)
+                    if subscriptionCheckID == subscriptionCheckGeneration {
+                        isSubscribed = subscribed
+                    }
                 }
             }
         } catch let error as APIError {
@@ -2254,9 +2271,14 @@ struct ChannelView: View {
         let effectiveChannelID = channel?.id.channelID ?? channelID
         subscription = appEnvironment?.dataManager.subscription(for: effectiveChannelID)
         isSubscribed = subscription != nil
+        subscriptionCheckGeneration += 1
+        let subscriptionCheckID = subscriptionCheckGeneration
         Task {
             if let service = appEnvironment?.subscriptionService {
-                isSubscribed = await service.isSubscribed(to: effectiveChannelID)
+                let subscribed = await service.isSubscribed(to: effectiveChannelID)
+                if subscriptionCheckID == subscriptionCheckGeneration {
+                    isSubscribed = subscribed
+                }
             }
         }
     }
