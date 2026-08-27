@@ -42,6 +42,12 @@ struct TappableVideoModifier: ViewModifier {
     // Resume action sheet state - using item-based sheet to ensure data is available when presented
     @State private var resumeSheetData: ResumeSheetData? = nil
 
+    /// Guards against a double-tap spawning a second, concurrent resume-position
+    /// lookup while the first is still awaiting the network - two overlapping
+    /// Tasks could each independently push queue history and race to set
+    /// `resumeSheetData`.
+    @State private var isResolvingResume = false
+
     // Password alert state (for WebDAV sources)
     @State private var showingPasswordAlert = false
     @State private var sourceNeedingPassword: MediaSource?
@@ -177,7 +183,12 @@ struct TappableVideoModifier: ViewModifier {
             return
         }
 
+        guard !isResolvingResume else { return }
+        isResolvingResume = true
+
         Task {
+            defer { isResolvingResume = false }
+
             // Determine the saved progress: prefer explicitly passed startTime
             // (e.g. a deep-linked timestamp), otherwise resolve the resume
             // position — Invidious server as source of truth when sync is

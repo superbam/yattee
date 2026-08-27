@@ -104,7 +104,12 @@ struct VideoInfoView: View {
     
     // Resume action sheet state
     @State private var resumeSheetData: ResumeSheetData?
-    
+
+    /// Guards against a double-tap spawning a second, concurrent resume-position
+    /// lookup while the first is still awaiting the network - two overlapping
+    /// Tasks could each independently navigate and race to set `resumeSheetData`.
+    @State private var isResolvingResume = false
+
     // Video details cache - stores full video details loaded from API
     @State private var loadedVideoDetails: [String: Video] = [:]
     @State private var isLoadingVideoDetails = false
@@ -383,8 +388,8 @@ struct VideoInfoView: View {
             ResumeActionSheet(
                 video: data.video,
                 resumeTime: data.resumeTime,
-                onContinue: { playVideoWithStartTime(data.resumeTime) },
-                onStartOver: { playVideoWithStartTime(0) }
+                onContinue: { playVideoWithStartTime(data.video, startTime: data.resumeTime) },
+                onStartOver: { playVideoWithStartTime(data.video, startTime: 0) }
             )
         }
         #if !os(tvOS)
@@ -2277,11 +2282,16 @@ struct VideoInfoView: View {
         // Live streams have no fixed timeline, so a resume position is meaningless -
         // never ask, always join at the live edge.
         guard !video.isLive else {
-            playVideoWithStartTime(0)
+            playVideoWithStartTime(video, startTime: 0)
             return
         }
 
+        guard !isResolvingResume else { return }
+        isResolvingResume = true
+
         Task {
+            defer { isResolvingResume = false }
+
             // Resolve the resume position: Invidious server as source of truth
             // when sync is enabled, else local database.
             let localProgress = env.dataManager.watchProgress(for: video.id.videoID)
@@ -2299,25 +2309,29 @@ struct VideoInfoView: View {
                 switch resumeActionSetting {
                 case .continueWatching:
                     // Use saved progress as start time
-                    playVideoWithStartTime(savedProgress)
+                    playVideoWithStartTime(video, startTime: savedProgress)
                 case .startFromBeginning:
                     // Always start from beginning
-                    playVideoWithStartTime(0)
+                    playVideoWithStartTime(video, startTime: 0)
                 case .ask:
                     // Show the resume action sheet
                     resumeSheetData = ResumeSheetData(video: video, resumeTime: savedProgress)
                 }
             } else {
                 // No saved progress or video was completed - play from beginning
-                playVideoWithStartTime(0)
+                playVideoWithStartTime(video, startTime: 0)
             }
         }
     }
     
     /// Plays the video with the specified start time.
-    private func playVideoWithStartTime(_ time: TimeInterval) {
-        guard let video = displayedVideo else { return }
-
+    ///
+    /// Takes `video` explicitly rather than re-reading `displayedVideo` — every
+    /// caller already resolved a specific video (often after an `await`, e.g.
+    /// resolving a resume position), and re-deriving from live navigation state
+    /// here would let the user swipe to a different video mid-await and end up
+    /// playing it seeked to the wrong video's saved timestamp.
+    private func playVideoWithStartTime(_ video: Video, startTime time: TimeInterval) {
         // Media-browser playback must go through `playFromMediaBrowser` so the
         // queue manager sets up on-demand stream/caption resolution — otherwise
         // Samba/WebDAV files cannot play.
