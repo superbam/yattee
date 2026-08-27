@@ -147,6 +147,22 @@ final class PlayerService {
     /// Tracks the last skipped segment to prevent duplicate skips.
     private var lastSkippedSegmentID: String?
 
+    /// Timestamp of the last SponsorBlock-triggered seek, and how long to
+    /// ignore further segment checks afterward. Guards against a cascading
+    /// second skip: MPVBackend.seek()'s non-loading path delivers its
+    /// didUpdateTime callback *optimistically*, with the seek target, before
+    /// mpv has actually finished seeking there. If that unconfirmed target
+    /// lands inside another (adjacent) segment - common with back-to-back
+    /// intro/sponsor segments - checking again immediately fires a second
+    /// seekAsync before the first one has really completed, which can wedge
+    /// tvOS's hardware decoder into a frozen frame that only a fresh manual
+    /// seek clears. The cooldown lets the real, mpv-confirmed position (via
+    /// the "time-pos" property observer) catch up before another skip is
+    /// considered; the next tick after it elapses still catches a
+    /// legitimately adjacent segment, just a beat later.
+    private var lastSponsorBlockSkipAt: Date?
+    private static let sponsorBlockSkipCooldown: TimeInterval = 0.5
+
     /// Tracks if the current video ended naturally (reached EOF).
     /// Used to prevent saving progress when switching to next video after natural completion.
     private var videoEndedNaturally = false
@@ -2962,6 +2978,12 @@ final class PlayerService {
 
         guard enabled else { return }
 
+        // See lastSponsorBlockSkipAt's doc comment: skip re-checking while a
+        // just-triggered skip's seek hasn't had time to actually land yet.
+        if let lastSkipAt = lastSponsorBlockSkipAt, Date().timeIntervalSince(lastSkipAt) < Self.sponsorBlockSkipCooldown {
+            return
+        }
+
         // Find segment at current time that matches enabled categories
         let applicableSegments = state.sponsorSegments.skippable().inCategories(enabledCategories)
         if let segment = applicableSegments.segment(at: time) {
@@ -2971,6 +2993,7 @@ final class PlayerService {
 
             if delegate?.playerService(self, shouldSkipSegment: segment) ?? true {
                 lastSkippedSegmentID = segment.id
+                lastSponsorBlockSkipAt = Date()
                 Task {
                     await skipSegment(segment)
                 }
