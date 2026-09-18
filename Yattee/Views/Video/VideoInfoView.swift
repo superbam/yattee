@@ -616,7 +616,7 @@ struct VideoInfoView: View {
                 Text(video.displayTitle(using: appEnvironment?.deArrowBrandingProvider))
                     .font(.title3)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
