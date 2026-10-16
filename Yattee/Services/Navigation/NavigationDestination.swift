@@ -92,21 +92,13 @@ extension NavigationDestination {
             ContinueWatchingView()
         case .downloads:
             #if os(tvOS)
-            ContentUnavailableView {
-                Label(String(localized: "home.downloads.title"), systemImage: "arrow.down.circle")
-            } description: {
-                Text(String(localized: "home.downloads.notAvailable"))
-            }
+            TVDownloadsUnavailableView(title: String(localized: "home.downloads.title"))
             #else
             DownloadsView()
             #endif
         case .downloadsStorage:
             #if os(tvOS)
-            ContentUnavailableView {
-                Label(String(localized: "settings.downloads.storage.title"), systemImage: "arrow.down.circle")
-            } description: {
-                Text(String(localized: "home.downloads.notAvailable"))
-            }
+            TVDownloadsUnavailableView(title: String(localized: "settings.downloads.storage.title"))
             #else
             DownloadsStorageView()
             #endif
@@ -152,6 +144,32 @@ extension NavigationDestination {
         }
     }
 }
+
+#if os(tvOS)
+// MARK: - tvOS Downloads Placeholder
+
+/// What a downloads destination shows on tvOS, which has no downloads.
+///
+/// Reachable on tvOS through `yattee://downloads`. Without a focusable element
+/// the focus engine has nowhere to land and the remote is stuck, so it carries
+/// a Done that pops it.
+private struct TVDownloadsUnavailableView: View {
+    let title: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(title, systemImage: "arrow.down.circle")
+        } description: {
+            Text(String(localized: "home.downloads.notAvailable"))
+        } actions: {
+            Button(String(localized: "common.done")) {
+                dismiss()
+            }
+        }
+    }
+}
+#endif
 
 // MARK: - Media Source by ID View
 
