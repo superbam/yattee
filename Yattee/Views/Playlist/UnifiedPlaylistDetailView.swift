@@ -142,7 +142,7 @@ struct UnifiedPlaylistDetailView: View {
                 // Show header with cached data + spinner for video list
                 loadingContent(cachedHeader)
             } else if case .remote = source, isLoading {
-                ProgressView()
+                loadingSpinner
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = errorMessage {
                 errorView(error)
@@ -270,7 +270,7 @@ struct UnifiedPlaylistDetailView: View {
     private var playlistBody: some View {
         if videos.isEmpty {
             if isLoading {
-                ProgressView()
+                loadingSpinner
                     .frame(maxWidth: .infinity)
                     .padding(.top, 40)
             } else {
@@ -279,6 +279,19 @@ struct UnifiedPlaylistDetailView: View {
         } else {
             videoList
         }
+    }
+
+    /// On tvOS a remote playlist this account does not own has no other
+    /// focusable element while it loads, and as a sidebar playlist it is a tab
+    /// root that cannot be popped — so Cancel lands on the error and its Retry.
+    private var loadingSpinner: some View {
+        ProgressView()
+            #if os(tvOS)
+            .tvStalledLoadCancel {
+                isLoading = false
+                errorMessage = String(localized: "common.loadingStopped")
+            }
+            #endif
     }
 
     /// Shows cached header with a spinner below while loading full playlist data.
@@ -294,7 +307,7 @@ struct UnifiedPlaylistDetailView: View {
                     .padding(.horizontal)
 
                 // Centered spinner for content area
-                ProgressView()
+                loadingSpinner
                     .frame(maxWidth: .infinity)
                     .padding(.top, 40)
             }
