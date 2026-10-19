@@ -2150,7 +2150,8 @@ extension CloudKitSyncEngine: CKSyncEngineDelegate {
                 } else {
                     // New subscription from iCloud
                     dataManager.insertSubscription(subscription)
-                    
+                    SubscriptionFeedCache.shared.invalidate()
+
                     // Post notification to update UI
                     let change = SubscriptionChange(addedSubscriptions: [subscription], removedChannelIDs: [])
                     NotificationCenter.default.post(
@@ -2582,6 +2583,7 @@ extension CloudKitSyncEngine: CKSyncEngineDelegate {
             if let subscription = localSubscription(matching: recordName, channelID: channelID, in: dataManager) {
                 dataManager.deleteSubscription(subscription)
                 dataManager.save()
+                SubscriptionFeedCache.shared.invalidate()
                 let change = SubscriptionChange(addedSubscriptions: [], removedChannelIDs: [channelID])
                 NotificationCenter.default.post(
                     name: .subscriptionsDidChange,
