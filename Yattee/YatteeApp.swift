@@ -330,12 +330,16 @@ struct YatteeApp: App {
                 // (throttled) and on a periodic timer while foregrounded.
                 Task { await appEnvironment.invidiousHistorySync.syncIfDue() }
                 appEnvironment.invidiousHistorySync.startPeriodicSync()
+                // FORK (playlist-sync)
+                Task { await appEnvironment.invidiousPlaylistSync.syncIfDue() }
+                appEnvironment.invidiousPlaylistSync.startPeriodicSync()
             }
 
             // Flush pending CloudKit changes when entering background
             if newPhase == .background {
                 appEnvironment.cloudKitSync.stopForegroundPolling()
                 appEnvironment.invidiousHistorySync.stopPeriodicSync()
+                appEnvironment.invidiousPlaylistSync.stopPeriodicSync() // FORK (playlist-sync)
                 SubscriptionFeedCache.shared.stopPeriodicWarm()
                 // Queue current watch progress so the position reaches other devices
                 appEnvironment.playerService.syncWatchProgress()
@@ -389,12 +393,16 @@ struct YatteeApp: App {
                 // (throttled) and on a periodic timer while foregrounded.
                 Task { await appEnvironment.invidiousHistorySync.syncIfDue() }
                 appEnvironment.invidiousHistorySync.startPeriodicSync()
+                // FORK (playlist-sync)
+                Task { await appEnvironment.invidiousPlaylistSync.syncIfDue() }
+                appEnvironment.invidiousPlaylistSync.startPeriodicSync()
             }
 
             // Flush pending CloudKit changes when entering background
             if newPhase == .background {
                 appEnvironment.cloudKitSync.stopForegroundPolling()
                 appEnvironment.invidiousHistorySync.stopPeriodicSync()
+                appEnvironment.invidiousPlaylistSync.stopPeriodicSync() // FORK (playlist-sync)
                 SubscriptionFeedCache.shared.stopPeriodicWarm()
                 // Queue current watch progress so the position reaches other devices
                 appEnvironment.playerService.syncWatchProgress()

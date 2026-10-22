@@ -603,6 +603,7 @@
 				"INFOPLIST_FILE[sdk=appletvos*]" = "Yattee/Info-tvOS.plist";
 				"INFOPLIST_FILE[sdk=appletvsimulator*]" = "Yattee/Info-tvOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Yattee 2";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Arkadiusz Fal";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Yattee uses local network to discover and control playback on other Yattee devices.";
@@ -686,6 +687,7 @@
 				"INFOPLIST_FILE[sdk=appletvos*]" = "Yattee/Info-tvOS.plist";
 				"INFOPLIST_FILE[sdk=appletvsimulator*]" = "Yattee/Info-tvOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Yattee 2";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Arkadiusz Fal";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Yattee uses local network to discover and control playback on other Yattee devices.";
@@ -829,6 +831,7 @@
 				"INFOPLIST_FILE[sdk=appletvos*]" = "Yattee/Info-tvOS.plist";
 				"INFOPLIST_FILE[sdk=appletvsimulator*]" = "Yattee/Info-tvOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Yattee 2";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Arkadiusz Fal";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Yattee uses local network to discover and control playback on other Yattee devices.";

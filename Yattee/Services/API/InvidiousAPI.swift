@@ -743,6 +743,128 @@ actor InvidiousAPI: InstanceAPI {
     }
 }
 
+// MARK: - Account Playlist Sync
+//
+// FORK (playlist-sync): read/write access to the signed-in account's playlists
+// (/api/v1/auth/playlists). Kept in this file because httpClient is file-private.
+
+/// Summary of one of the account's playlists.
+struct InvidiousAccountPlaylist: Sendable {
+    let id: String
+    let title: String
+    let description: String?
+    let videoCount: Int
+}
+
+/// One video in an account playlist, with the per-entry `indexId` the server
+/// needs in order to remove it.
+struct InvidiousPlaylistEntry: Sendable {
+    let indexId: String
+    let video: Video
+}
+
+/// Page of playlist entries. Items Invidious failed to parse decode as nil
+/// instead of failing the whole page.
+private struct InvidiousPlaylistEntryPage: Decodable, Sendable {
+    struct Lossy: Decodable, Sendable {
+        let value: InvidiousAuthPlaylistVideo?
+        init(from decoder: Decoder) throws {
+            value = try? InvidiousAuthPlaylistVideo(from: decoder)
+        }
+    }
+
+    let videoCount: Int
+    let videos: [Lossy]?
+}
+
+private struct InvidiousCreatedPlaylist: Decodable, Sendable {
+    let playlistId: String
+}
+
+extension InvidiousAPI {
+    private static func sidHeader(_ sid: String) -> [String: String] {
+        ["Cookie": "SID=\(sid)"]
+    }
+
+    func accountPlaylists(instance: Instance, sid: String) async throws -> [InvidiousAccountPlaylist] {
+        let endpoint = GenericEndpoint.get("/api/v1/auth/playlists")
+        let response: [InvidiousAuthPlaylist] = try await httpClient.fetch(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: Self.sidHeader(sid)
+        )
+        return response.map {
+            InvidiousAccountPlaylist(id: $0.playlistId, title: $0.title, description: $0.description, videoCount: $0.videoCount)
+        }
+    }
+
+    /// Fetches every entry of an account playlist in order. Invidious pages
+    /// overlap (it looks back up to 50 items), so entries are de-duplicated by
+    /// `indexId`. Throws if any page fails so callers never act on a partial list.
+    func accountPlaylistEntries(id: String, instance: Instance, sid: String) async throws -> [InvidiousPlaylistEntry] {
+        var entries: [InvidiousPlaylistEntry] = []
+        var seen = Set<String>()
+        let maxPages = 100
+        var page = 1
+        while page <= maxPages {
+            let endpoint = GenericEndpoint.get("/api/v1/auth/playlists/\(id)", query: ["page": String(page)])
+            let response: InvidiousPlaylistEntryPage = try await httpClient.fetch(
+                endpoint,
+                baseURL: instance.url,
+                customHeaders: Self.sidHeader(sid)
+            )
+            let pageEntries = (response.videos ?? []).compactMap(\.value)
+            if (response.videos ?? []).isEmpty { break }
+            for entry in pageEntries {
+                guard let indexId = entry.indexId, seen.insert(indexId).inserted else { continue }
+                entries.append(InvidiousPlaylistEntry(indexId: indexId, video: entry.toVideo(baseURL: instance.url)))
+            }
+            if entries.count >= response.videoCount { break }
+            page += 1
+        }
+        return entries
+    }
+
+    /// Creates a playlist and returns its ID. Description is applied with a
+    /// follow-up PATCH because the create endpoint only accepts title/privacy.
+    func createAccountPlaylist(title: String, description: String?, privacy: String, instance: Instance, sid: String) async throws -> String {
+        struct Body: Encodable { let title: String; let privacy: String }
+        let endpoint = GenericEndpoint.post("/api/v1/auth/playlists", body: Body(title: title, privacy: privacy))
+        let created: InvidiousCreatedPlaylist = try await httpClient.fetch(
+            endpoint,
+            baseURL: instance.url,
+            customHeaders: Self.sidHeader(sid)
+        )
+        if let description, !description.isEmpty {
+            try await updateAccountPlaylist(id: created.playlistId, title: title, description: description, instance: instance, sid: sid)
+        }
+        return created.playlistId
+    }
+
+    func updateAccountPlaylist(id: String, title: String, description: String?, instance: Instance, sid: String) async throws {
+        struct Body: Encodable { let title: String; let description: String }
+        let body = try JSONEncoder().encode(Body(title: title, description: description ?? ""))
+        let endpoint = GenericEndpoint(path: "/api/v1/auth/playlists/\(id)", method: .patch, body: body)
+        try await httpClient.sendRequest(endpoint, baseURL: instance.url, customHeaders: Self.sidHeader(sid))
+    }
+
+    func deleteAccountPlaylist(id: String, instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint.delete("/api/v1/auth/playlists/\(id)")
+        try await httpClient.sendRequest(endpoint, baseURL: instance.url, customHeaders: Self.sidHeader(sid))
+    }
+
+    func addVideoToAccountPlaylist(playlistID: String, videoID: String, instance: Instance, sid: String) async throws {
+        struct Body: Encodable { let videoId: String }
+        let endpoint = GenericEndpoint.post("/api/v1/auth/playlists/\(playlistID)/videos", body: Body(videoId: videoID))
+        try await httpClient.sendRequest(endpoint, baseURL: instance.url, customHeaders: Self.sidHeader(sid))
+    }
+
+    func removeVideoFromAccountPlaylist(playlistID: String, indexId: String, instance: Instance, sid: String) async throws {
+        let endpoint = GenericEndpoint.delete("/api/v1/auth/playlists/\(playlistID)/videos/\(indexId)")
+        try await httpClient.sendRequest(endpoint, baseURL: instance.url, customHeaders: Self.sidHeader(sid))
+    }
+}
+
 // MARK: - Video Proxy
 
 extension InvidiousAPI {

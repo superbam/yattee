@@ -108,6 +108,21 @@ struct PrivacySettingsView: View {
                         #endif
                     }
 
+                    // FORK (playlist-sync)
+                    Toggle(
+                        "Sync playlists with Invidious account",
+                        isOn: Bindable(settingsManager).syncPlaylistsWithInvidiousAccount
+                    )
+                    .onChange(of: settingsManager.syncPlaylistsWithInvidiousAccount) { _, isOn in
+                        guard let playlistSync = appEnvironment?.invidiousPlaylistSync else { return }
+                        if isOn {
+                            Task { await playlistSync.sync() }
+                            playlistSync.startPeriodicSync()
+                        } else {
+                            playlistSync.stopPeriodicSync()
+                        }
+                    }
+
                     if settingsManager.syncWatchHistoryWithInvidiousAccount {
                         PlatformMenuPicker(
                             "Mark watched threshold",

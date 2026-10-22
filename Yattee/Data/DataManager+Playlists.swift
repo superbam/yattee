@@ -12,13 +12,20 @@ extension DataManager {
     // MARK: - Local Playlists
 
     /// Creates a new local playlist.
-    func createPlaylist(title: String, description: String? = nil) -> LocalPlaylist {
+    /// - Parameter syncToInvidious: FORK (playlist-sync): when the Invidious
+    ///   playlist sync is on, also create the playlist on the account. Pass
+    ///   false for playlists that are copies of existing account playlists.
+    func createPlaylist(title: String, description: String? = nil, syncToInvidious: Bool = true) -> LocalPlaylist {
         let playlist = LocalPlaylist(title: title, description: description)
         modelContext.insert(playlist)
         save()
-        
-        // Queue for CloudKit sync
-        cloudKitSync?.queuePlaylistSave(playlist)
+
+        // FORK (playlist-sync): account-managed playlists skip CloudKit.
+        let managedByAccount = syncToInvidious && (invidiousPlaylistSync?.registerNewLocalPlaylist(playlist) ?? false)
+        if !managedByAccount {
+            // Queue for CloudKit sync
+            cloudKitSync?.queuePlaylistSave(playlist)
+        }
         
         NotificationCenter.default.post(name: .playlistsDidChange, object: nil)
         return playlist
@@ -31,8 +38,12 @@ extension DataManager {
         playlist.updatedAt = Date()
         save()
 
-        // Queue for CloudKit sync
-        cloudKitSync?.queuePlaylistSave(playlist)
+        // Queue for CloudKit sync (FORK playlist-sync: account-managed playlists skip it)
+        if invidiousPlaylistSync?.isLinked(playlist) == true {
+            invidiousPlaylistSync?.localPlaylistChanged()
+        } else {
+            cloudKitSync?.queuePlaylistSave(playlist)
+        }
 
         NotificationCenter.default.post(name: .playlistsDidChange, object: nil)
     }
@@ -41,14 +52,20 @@ extension DataManager {
     func deletePlaylist(_ playlist: LocalPlaylist) {
         let playlistID = playlist.id
         let itemIDs = playlist.sortedItems.map { $0.id }
+        let managedByAccount = invidiousPlaylistSync?.isLinked(playlist) == true
 
         modelContext.delete(playlist)
         save()
 
-        // Queue playlist and all its items for CloudKit deletion
-        cloudKitSync?.queuePlaylistDelete(playlistID: playlistID)
-        for itemID in itemIDs {
-            cloudKitSync?.queuePlaylistItemDelete(itemID: itemID)
+        // FORK (playlist-sync): deleting an account-managed playlist deletes it on the account.
+        if managedByAccount {
+            invidiousPlaylistSync?.localPlaylistDeleted(id: playlistID)
+        } else {
+            // Queue playlist and all its items for CloudKit deletion
+            cloudKitSync?.queuePlaylistDelete(playlistID: playlistID)
+            for itemID in itemIDs {
+                cloudKitSync?.queuePlaylistItemDelete(itemID: itemID)
+            }
         }
 
         NotificationCenter.default.post(name: .playlistsDidChange, object: nil)
@@ -142,9 +159,14 @@ extension DataManager {
         }
         playlist.addVideo(video)
         save()
-        
+
         // Queue for CloudKit sync (will sync playlist and all items)
-        cloudKitSync?.queuePlaylistSave(playlist)
+        // FORK (playlist-sync): account-managed playlists sync via Invidious instead.
+        if invidiousPlaylistSync?.isLinked(playlist) == true {
+            invidiousPlaylistSync?.localPlaylistChanged()
+        } else {
+            cloudKitSync?.queuePlaylistSave(playlist)
+        }
         
         NotificationCenter.default.post(name: .playlistsDidChange, object: nil)
     }
@@ -160,10 +182,17 @@ extension DataManager {
         save()
         
         // Queue updated playlist for CloudKit sync
-        cloudKitSync?.queuePlaylistSave(playlist)
-        
-        // Also delete the orphaned item from CloudKit
-        cloudKitSync?.queuePlaylistItemDelete(itemID: itemID)
+        // FORK (playlist-sync): account-managed playlists sync via Invidious instead.
+        if invidiousPlaylistSync?.isLinked(playlist) == true {
+            modelContext.delete(item)
+            save()
+            invidiousPlaylistSync?.localPlaylistChanged()
+        } else {
+            cloudKitSync?.queuePlaylistSave(playlist)
+
+            // Also delete the orphaned item from CloudKit
+            cloudKitSync?.queuePlaylistItemDelete(itemID: itemID)
+        }
         
         NotificationCenter.default.post(name: .playlistsDidChange, object: nil)
     }

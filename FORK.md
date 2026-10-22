@@ -47,6 +47,16 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
    probe loop is a `.task` on `SourcesListView`, so it stops when the list
    disappears.
 
+- **playlist-sync** — two-way sync of the signed-in Invidious account's
+  playlists. Each account playlist is mirrored as a `LocalPlaylist` (not queued
+  to CloudKit; every device mirrors the account itself). Local add/remove/
+  rename/delete push to `/api/v1/auth/playlists`; remote changes are pulled on
+  launch, foreground and a periodic timer. A per-playlist snapshot gives a
+  three-way merge (offline edits and failed pushes retry idempotently; base
+  advances only after a fully successful push). YouTube videos only. Existing
+  local playlists are not uploaded; new ones are created private. Toggle:
+  Settings > Privacy > "Sync playlists with Invidious account" (local-only).
+
 ## New files (fork-owned, conflict-free)
 
 - `Yattee/Services/InvidiousHistorySyncService.swift` — push/pull coordinator.
@@ -56,6 +66,10 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
   `syncWatchHistoryWithInvidiousAccount` accessors &
   `backgroundRefreshShouldBeScheduled` (notifications-or-sync gate).
 - `Yattee/Models/Navigation/FeedVideoKind.swift` — All/Videos/Shorts enum.
+- `Yattee/Services/InvidiousPlaylistSyncService.swift` — playlist-sync
+  coordinator (link table, pending deletes, three-way merge, timer).
+- `Yattee/Data/DataManager+InvidiousPlaylistSync.swift` — mirrored-playlist
+  create/apply/delete helpers (no CloudKit queuing).
 - `Yattee/Services/SourceStatusRefresher.swift` — sources-list status probe
   loop (all probing/classification logic lives here).
 - `Yattee/Services/Downloads/DownloadManager+OfflineSponsorBlock.swift` —
@@ -90,6 +104,11 @@ upstream edits routinely shift them.
 | `Yattee/Views/Search/SearchView.swift` | `videoKind` state, filter in `unifiedResults`, `videoKindPicker` under filter strip | — | 53, 548, 557, 1015 |
 | `Yattee/Views/Settings/PlaybackSettingsView.swift` | "Hide Shorts" toggle | — | 282 |
 | `Yattee/Views/Settings/PrivacySettingsView.swift` | "Sync history with Invidious account" toggle; its `onChange` also schedules/cancels the iOS background-refresh task | — | 67, 70, 93 |
+| `Yattee/Services/API/InvidiousAPI.swift` (playlist-sync) | account-playlist extension (`accountPlaylists`, `accountPlaylistEntries`, create/update/delete, add/remove video) before `// MARK: - Video Proxy` | `FORK (playlist-sync)` | — |
+| `Yattee/Data/DataManager.swift`, `DataManager+Playlists.swift` | `invidiousPlaylistSync` weak ref; hooks in create/update/delete/add/remove; `createPlaylist(syncToInvidious:)` | `FORK (playlist-sync)` | — |
+| `Yattee/Core/Settings/SettingsKey.swift`, `Core/SettingsManager.swift`, `SettingsManager+ShortsSync.swift` | local-only `syncPlaylistsWithInvidiousAccount` setting | `FORK (playlist-sync)` | — |
+| `Yattee/Core/AppEnvironment.swift`, `Yattee/YatteeApp.swift` | construct/inject playlist sync; start/stop with lifecycle | `FORK (playlist-sync)` | — |
+| `Yattee/Views/Settings/PrivacySettingsView.swift`, `ImportPlaylistsView.swift` | toggle; import passes `syncToInvidious: false` | `FORK (playlist-sync)` | — |
 | `Yattee.xcodeproj/project.pbxproj`, `*/*.entitlements`, `Yattee/Info*.plist`, `*/AppGroup.swift`, `Yattee/Core/AppIdentifiers.swift` | bundle-ID rebrand + iCloud `Production` env | — | scattered (search `com.bammcm.yattee`) |
 
 ## Notes

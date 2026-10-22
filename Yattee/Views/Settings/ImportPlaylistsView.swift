@@ -320,7 +320,7 @@ struct ImportPlaylistsView: View {
         }
 
         // Create new local playlist and import
-        let localPlaylist = appEnvironment.dataManager.createPlaylist(title: playlist.title)
+        let localPlaylist = appEnvironment.dataManager.createPlaylist(title: playlist.title, syncToInvidious: false)
         await performImport(playlist, into: localPlaylist)
     }
 

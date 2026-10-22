@@ -66,6 +66,21 @@ extension SettingsManager {
         }
     }
 
+    /// Whether to two-way sync playlists with the signed-in Invidious account
+    /// (playlist-sync). Stored locally; default false.
+    var syncPlaylistsWithInvidiousAccount: Bool {
+        get {
+            if let cached = _syncPlaylistsWithInvidiousAccount { return cached }
+            let value = bool(for: .syncPlaylistsWithInvidiousAccount, default: false)
+            _syncPlaylistsWithInvidiousAccount = value
+            return value
+        }
+        set {
+            _syncPlaylistsWithInvidiousAccount = newValue
+            set(newValue, for: .syncPlaylistsWithInvidiousAccount)
+        }
+    }
+
     /// Whether the iOS OS-level background refresh task should be scheduled.
     /// True when video notifications need it, OR when Invidious history sync is
     /// on — so playback sync keeps running in the background even if the user

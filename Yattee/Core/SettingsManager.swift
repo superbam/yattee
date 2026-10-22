@@ -203,6 +203,7 @@ final class SettingsManager {
     var _hideShorts: Bool?
     var _syncWatchHistoryWithInvidiousAccount: Bool?
     var _invidiousMarkWatchedThresholdPercent: Int?
+    var _syncPlaylistsWithInvidiousAccount: Bool?
 
     // Subscription account settings
     var _subscriptionAccount: SubscriptionAccount?
@@ -585,5 +586,6 @@ final class SettingsManager {
         _hideShorts = nil
         _syncWatchHistoryWithInvidiousAccount = nil
         _invidiousMarkWatchedThresholdPercent = nil
+        _syncPlaylistsWithInvidiousAccount = nil
     }
 }

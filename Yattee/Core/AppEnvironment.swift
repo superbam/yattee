@@ -53,6 +53,7 @@ final class AppEnvironment {
     let pipedAPI: PipedAPI
     let subscriptionAccountValidator: SubscriptionAccountValidator
     let invidiousHistorySync: InvidiousHistorySyncService
+    let invidiousPlaylistSync: InvidiousPlaylistSyncService // FORK (playlist-sync)
     let notRecommendService: NotRecommendService // FORK (norecommend)
     let sourceStatusRefresher: SourceStatusRefresher // FORK (sources-status)
     let playerControlsLayoutService: PlayerControlsLayoutService
@@ -314,6 +315,19 @@ final class AppEnvironment {
         dm.invidiousHistorySync = historySync
         player.setInvidiousHistorySync(historySync)
         Task { await historySync.sync() }
+
+        // FORK (playlist-sync): two-way sync of account playlists with local
+        // playlists; pulls once on launch (a no-op unless enabled and signed in).
+        let playlistSync = InvidiousPlaylistSyncService(
+            invidiousAPI: invidiousAPI,
+            credentialsManager: invidiousCreds,
+            instancesManager: instances,
+            settingsManager: settings,
+            dataManager: dm
+        )
+        self.invidiousPlaylistSync = playlistSync
+        dm.invidiousPlaylistSync = playlistSync
+        Task { await playlistSync.sync() }
 
         // FORK (norecommend): the signed-in account's don't-recommend list,
         // loaded once on launch so filtering is in place before the first

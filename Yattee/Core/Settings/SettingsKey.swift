@@ -163,6 +163,10 @@ enum SettingsKey: String, CaseIterable {
     // it's marked watched on the Invidious account. Follows the same sync
     // rules as the toggle above.
     case invidiousMarkWatchedThresholdPercent
+    // FORK (playlist-sync): two-way sync of playlists with the signed-in
+    // Invidious account. Local-only (see isLocalOnly): the playlist link table
+    // it relies on is per device.
+    case syncPlaylistsWithInvidiousAccount
 
     /// Whether this key should have platform-specific prefixes.
     /// Platform-specific keys are stored under a `iOS.` / `macOS.` / `tvOS.` prefix
@@ -206,6 +210,7 @@ enum SettingsKey: String, CaseIterable {
         case .remoteControlCustomDeviceName, .remoteControlHideWhenBackgrounded,
              .activeControlsPresetID,  // Per-device preset selection
              .onboardingCompleted,  // Per-device onboarding state
+             .syncPlaylistsWithInvidiousAccount,  // FORK (playlist-sync): link table is per device
              .tvOSStartupTabBeforeSubscriptionsDefault:  // Internal undo bookkeeping, not a user-facing setting
             return true
         default:

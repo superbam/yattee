@@ -29,6 +29,11 @@ final class DataManager {
     /// of only ever pulling from it. (playback-sync)
     weak var invidiousHistorySync: InvidiousHistorySyncService?
 
+    /// FORK (playlist-sync): mirrors the signed-in Invidious account's
+    /// playlists. Local playlist mutations notify it; playlists it manages
+    /// are not queued to CloudKit.
+    weak var invidiousPlaylistSync: InvidiousPlaylistSyncService?
+
     /// Whether CloudKit sync is currently enabled for this instance.
     private(set) var isCloudKitEnabled: Bool = false
     
