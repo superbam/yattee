@@ -19,6 +19,8 @@ import SwiftUI
 struct AVSyncDiagnosticsView: View {
     @Bindable var settings: SettingsManager
     @Environment(\.appEnvironment) private var appEnvironment
+    // FORK (auto-av-sync)
+    @AppStorage(TVRouteLatencyCompensation.enabledKey) private var autoCompensate = true
 
     private let minDelayMs: Double = -500
     private let maxDelayMs: Double = 500
@@ -39,6 +41,19 @@ struct AVSyncDiagnosticsView: View {
                 )
                 Spacer()
                 Text(String(format: "%+.0f ms", settings.tvAudioDelayMs))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+
+            // FORK (auto-av-sync): automatic compensation for AirPlay / Bluetooth routes.
+            Toggle("Automatic delay for wireless audio", isOn: $autoCompensate)
+                .onChange(of: autoCompensate) { _, _ in set(to: settings.tvAudioDelayMs) }
+            let reading = TVRouteLatencyCompensation.current()
+            HStack {
+                Text(reading.route)
+                    .lineLimit(1)
+                Spacer()
+                Text(String(format: "latency %.0f ms, auto %+.0f ms", reading.outputLatencyMs, reading.compensationMs))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }

@@ -942,7 +942,12 @@ final class MPVBackend: PlayerBackend {
     /// Push the current tvOS audio-delay setting into the running MPV instance.
     /// Caller passes milliseconds; MPVClient converts to seconds.
     func updateAudioDelay(milliseconds: Double) {
+        #if os(tvOS)
+        // FORK (auto-av-sync): add wireless-route latency compensation to the manual offset.
+        mpvClient?.updateAudioDelay(milliseconds: TVRouteLatencyCompensation.effectiveDelayMs(manualMs: milliseconds))
+        #else
         mpvClient?.updateAudioDelay(milliseconds: milliseconds)
+        #endif
     }
 
     /// Get the actual video track dimensions from MPV.
@@ -1987,6 +1992,16 @@ extension MPVBackend: MPVClientDelegate {
             #endif
             try session.setActive(true, options: [])
             LoggingService.shared.debug("MPV: Audio session reactivated for Now Playing", category: .mpv)
+            #if os(tvOS)
+            // FORK (auto-av-sync): re-evaluate route latency on load and on every audio reconfig.
+            let reading = TVRouteLatencyCompensation.current()
+            let manualMs = SettingsManager.tvAudioDelayMsSync()
+            mpvClient?.updateAudioDelay(milliseconds: manualMs + reading.compensationMs)
+            LoggingService.shared.debug(
+                "MPV: Route \(reading.route) outputLatency=\(String(format: "%.0f", reading.outputLatencyMs))ms wireless=\(reading.isWireless) auto=\(String(format: "%+.0f", reading.compensationMs))ms manual=\(String(format: "%+.0f", manualMs))ms",
+                category: .mpv
+            )
+            #endif
         } catch {
             LoggingService.shared.error("MPV: Failed to reactivate audio session: \(error.localizedDescription)", category: .mpv)
         }

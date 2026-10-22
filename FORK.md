@@ -57,7 +57,15 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
   local playlists are not uploaded; new ones are created private. Toggle:
   Settings > Privacy > "Sync playlists with Invidious account" (local-only).
 
+- **auto-av-sync** (tvOS) — mpv's avfoundation AO ignores route latency, so
+  audio on AirPlay/Bluetooth runs late. On wireless routes the audio delay is
+  shifted earlier by `AVAudioSession.outputLatency`, re-evaluated on load and
+  every audio reconfig, added to the manual offset. HDMI is untouched. Toggle
+  and live readout in A/V Sync Diagnostics.
+
 ## New files (fork-owned, conflict-free)
+
+- `Yattee/Services/Player/TVRouteLatencyCompensation.swift` — auto-av-sync.
 
 - `Yattee/Services/InvidiousHistorySyncService.swift` — push/pull coordinator.
 - `Yattee/Data/DataManager+InvidiousHistorySync.swift` — `markFinishedFromSync`,
