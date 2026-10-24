@@ -450,7 +450,7 @@ final class PlayerService {
                 NotificationCenter.default.post(name: .videoDetailsDidLoad, object: nil)
 
                 // Auto-load preferred subtitle if set and will use MPV backend
-                if backendType == .mpv,
+                if backendType == .mpv || backendType == .avplayer,  // FORK (native-player)
                    let preferredLanguage = settingsManager?.preferredSubtitlesLanguage,
                    !preferredLanguage.isEmpty {
                     // Find matching caption (will be loaded after backend is ready)
@@ -658,6 +658,13 @@ final class PlayerService {
                 mpvBackend.loadCaption(caption)
                 LoggingService.shared.logPlayer("Auto-loaded preferred subtitle: \(caption.displayName)")
             }
+            // FORK (native-player)
+            #if os(tvOS)
+            if let caption = currentCaption, let native = backend as? AVPlayerBackend {
+                native.loadCaption(caption)
+                LoggingService.shared.logPlayer("Auto-loaded preferred subtitle (native player): \(caption.displayName)")
+            }
+            #endif
 
             // Start progress saving
             startProgressSaveTimer()
@@ -1465,6 +1472,15 @@ final class PlayerService {
     /// Only works with MPV backend.
     /// - Parameter caption: The caption to load, or nil to disable subtitles
     func loadCaption(_ caption: Caption?) {
+        // FORK (native-player): the Apple-player backend draws captions itself.
+        #if os(tvOS)
+        if let native = currentBackend as? AVPlayerBackend {
+            native.loadCaption(caption)
+            currentCaption = caption
+            desiredEmbeddedSubtitleTrackID = nil
+            return
+        }
+        #endif
         guard let mpvBackend = currentBackend as? MPVBackend else {
             LoggingService.shared.debug("Cannot load caption: not using MPV backend", category: .player)
             return

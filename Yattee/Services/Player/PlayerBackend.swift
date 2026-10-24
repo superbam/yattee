@@ -131,7 +131,9 @@ enum PlayerBackendType: String, CaseIterable, Codable, Sendable {
     var supportedFormats: Set<StreamFormat> {
         switch self {
         case .mpv: return Set(StreamFormat.allCases)
-        case .avplayer: return [.mp4H264, .audioAAC]
+        // Lists every format in the quality picker; manually picking one that Apple's player
+        // can't handle replays on mpv (PlayerService falls back to the preferred backend).
+        case .avplayer: return Set(StreamFormat.allCases)
         }
     }
 

@@ -17,20 +17,92 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-/// UIView whose layer is an AVPlayerLayer.
+/// UIView whose layer is an AVPlayerLayer, with a label that draws captions
+/// (AVPlayerLayer doesn't render subtitles itself).
 final class NativePlayerLayerView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
 
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer } // swiftlint:disable:this force_cast
 
+    private let captionLabel = UILabel()
+    private var captionText: String?
+    private var style = SubtitleSettings.default
+    private var bottomConstraint: NSLayoutConstraint?
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .black
         playerLayer.videoGravity = .resizeAspect
+
+        captionLabel.numberOfLines = 0
+        captionLabel.textAlignment = .center
+        captionLabel.isHidden = true
+        captionLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(captionLabel)
+        let bottom = captionLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -40)
+        bottomConstraint = bottom
+        NSLayoutConstraint.activate([
+            captionLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            captionLabel.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, multiplier: 0.8),
+            bottom
+        ])
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        renderCaption()
+    }
+
+    func setCaption(text: String?) {
+        guard text != captionText else { return }
+        captionText = text
+        renderCaption()
+    }
+
+    func apply(style: SubtitleSettings) {
+        self.style = style
+        renderCaption()
+    }
+
+    private func color(_ color: CodableColor) -> UIColor {
+        UIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.opacity)
+    }
+
+    /// Sizes follow mpv's convention (values are in 720p-scaled units).
+    private func renderCaption() {
+        guard let text = captionText, !text.isEmpty else {
+            captionLabel.isHidden = true
+            return
+        }
+        let scale = max(bounds.height, 1) / 720
+        let pointSize = CGFloat(style.fontSize) * scale
+        var descriptor = UIFont.systemFont(ofSize: pointSize).fontDescriptor
+        switch style.font {
+        case .sansSerif: break
+        case .serif: descriptor = descriptor.withDesign(.serif) ?? descriptor
+        case .monospaced: descriptor = descriptor.withDesign(.monospaced) ?? descriptor
+        }
+        var traits: UIFontDescriptor.SymbolicTraits = []
+        if style.isBold { traits.insert(.traitBold) }
+        if style.isItalic { traits.insert(.traitItalic) }
+        let font = UIFont(descriptor: descriptor.withSymbolicTraits(traits) ?? descriptor, size: pointSize)
+
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color(style.textColor)
+        ]
+        if style.borderSize > 0 {
+            attributes[.strokeColor] = color(style.borderColor)
+            attributes[.strokeWidth] = -style.borderSize * 2
+        }
+        captionLabel.attributedText = NSAttributedString(string: text, attributes: attributes)
+        captionLabel.backgroundColor = style.showBackground ? color(style.backgroundColor) : .clear
+        bottomConstraint?.constant = -CGFloat(style.bottomMargin) * scale - 20
+        captionLabel.isHidden = false
+    }
 }
 
 @MainActor
@@ -78,7 +150,7 @@ final class AVPlayerBackend: PlayerBackend {
         set { player.isMuted = newValue }
     }
 
-    let supportedFormats: Set<StreamFormat> = [.mp4H264, .audioAAC]
+    let supportedFormats: Set<StreamFormat> = Set(StreamFormat.allCases)
 
     var playerView: UIView? { layerView }
 
@@ -95,6 +167,9 @@ final class AVPlayerBackend: PlayerBackend {
     private var pendingInitialSeek = false
     private var didNotifyReady = false
     private var reportedStreamRefresh = false
+    private var captionCues: [NativeCaptionCue] = []
+    private var captionTask: Task<Void, Never>?
+    private var tickCount = 0
 
     init() {
         layerView.playerLayer.player = player
@@ -202,15 +277,51 @@ final class AVPlayerBackend: PlayerBackend {
         if state.isPlaying { play() }
     }
 
+    // MARK: - Captions
+
+    /// Loads (or, with nil, clears) an external caption file and draws it over the video.
+    func loadCaption(_ caption: Caption?) {
+        captionTask?.cancel()
+        captionCues = []
+        layerView.setCaption(text: nil)
+        guard let caption else { return }
+
+        layerView.apply(style: SettingsManager.subtitleSettingsSync())
+        captionTask = Task { [weak self] in
+            do {
+                let (data, _) = try await URLSession.shared.data(from: caption.url)
+                let cues = NativeCaptionParser.parse(String(decoding: data, as: UTF8.self))
+                guard !Task.isCancelled, let self else { return }
+                if cues.isEmpty {
+                    LoggingService.shared.warning("AVPlayerBackend: caption \(caption.displayName) had no readable cues", category: .player)
+                }
+                self.captionCues = cues
+                self.updateCaption()
+            } catch {
+                LoggingService.shared.error("AVPlayerBackend: caption download failed: \(error.localizedDescription)", category: .player)
+            }
+        }
+    }
+
+    private func updateCaption() {
+        guard !captionCues.isEmpty else { return }
+        let text = NativeCaptionParser.active(in: captionCues, at: currentTime).map(\.text).joined(separator: "\n")
+        layerView.setCaption(text: text.isEmpty ? nil : text)
+    }
+
     // MARK: - Observation
 
     private func startObservingPlayer() {
+        // Ticks every 0.1 s so captions change on time; the delegate gets every 5th tick.
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
+            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.player.currentItem != nil else { return }
+                self.updateCaption()
+                self.tickCount += 1
+                guard self.tickCount % 5 == 0 else { return }
                 self.delegate?.backend(self, didUpdateTime: self.currentTime)
                 self.delegate?.backend(self, didUpdateBufferedTime: self.bufferedTime)
             }
@@ -291,6 +402,9 @@ final class AVPlayerBackend: PlayerBackend {
     }
 
     private func resetItem() {
+        captionTask?.cancel()
+        captionCues = []
+        layerView.setCaption(text: nil)
         statusObservation = nil
         sizeObservation = nil
         if let endObserver {

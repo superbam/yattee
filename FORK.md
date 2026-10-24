@@ -72,13 +72,15 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
   A/V Sync Diagnostics (`tvNativePlayerEnabled`). Live, VP9/AV1/Opus and
   anything without ranges stay on mpv; if the native backend fails to load a
   video, PlayerService replays it on mpv (`nativePlayerFailedVideoIDs`).
-  Not implemented yet: captions, track picker, PiP, SponsorBlock-specific UI
-  is unchanged (it works off playback time).
+  Captions: external caption files (Caption.url, WebVTT/SRT) are parsed by
+  `NativeCaptionParser` and drawn by the backend's own label using the
+  subtitle appearance settings. Not implemented yet: embedded track picker, PiP.
 
 ## New files (fork-owned, conflict-free)
 
 - `Yattee/Services/Player/Native/` — native-player: `DASHToHLS`,
-  `LoopbackPlaylistServer`, `NativeStreamSelector`, `AVPlayerBackend`.
+  `LoopbackPlaylistServer`, `NativeStreamSelector`, `NativeCaptionParser`,
+  `AVPlayerBackend`.
 
 - `Yattee/Services/Player/TVRouteLatencyCompensation.swift` — auto-av-sync.
 
