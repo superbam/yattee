@@ -118,18 +118,26 @@ enum StreamFormat: String, CaseIterable, Sendable {
 /// Available player backend types.
 enum PlayerBackendType: String, CaseIterable, Codable, Sendable {
     case mpv = "mpv"
+    /// FORK (native-player): experimental tvOS-only AVPlayer backend.
+    case avplayer = "avplayer"
 
     var displayName: String {
-        "MPV"
+        switch self {
+        case .mpv: return "MPV"
+        case .avplayer: return "Apple Player"
+        }
     }
 
     var supportedFormats: Set<StreamFormat> {
-        Set(StreamFormat.allCases)
+        switch self {
+        case .mpv: return Set(StreamFormat.allCases)
+        case .avplayer: return [.mp4H264, .audioAAC]
+        }
     }
 
     /// Whether this backend supports AirPlay.
     var supportsAirPlay: Bool {
-        false
+        self == .avplayer
     }
 
     /// Whether this backend supports Picture-in-Picture.

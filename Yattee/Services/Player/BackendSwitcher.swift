@@ -479,6 +479,13 @@ final class BackendFactory {
         switch type {
         case .mpv:
             return MPVBackend()
+        case .avplayer:
+            // FORK (native-player): tvOS only; selected explicitly by PlayerService.
+            #if os(tvOS)
+            return AVPlayerBackend()
+            #else
+            return MPVBackend()
+            #endif
         }
     }
     
@@ -549,6 +556,9 @@ final class BackendFactory {
         switch type {
         case .mpv:
             return true
+        case .avplayer:
+            // FORK (native-player): never picked by generic fallback selection.
+            return false
         }
     }
 

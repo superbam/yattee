@@ -53,6 +53,9 @@ final class PlayerService {
     /// Available streams for the current video.
     private(set) var availableStreams: [Stream] = []
 
+    /// FORK (native-player): videos the Apple-player backend failed on this session; they replay on mpv.
+    private var nativePlayerFailedVideoIDs: Set<String> = []
+
     /// Original (unproxied) streams from the API, used to re-apply proxy when settings change.
     private var originalStreams: [Stream] = []
 
@@ -415,7 +418,19 @@ final class PlayerService {
                 LoggingService.shared.logPlayer("Loaded \(storyboards.count) storyboards, preferred: \(state.preferredStoryboard?.width ?? 0)x\(state.preferredStoryboard?.height ?? 0)")
 
                 // Select best stream for preferred backend
-                let selection = selectStreamAndBackend(from: streams)
+                var selection = selectStreamAndBackend(from: streams)
+
+                // FORK (native-player): experimental tvOS switch - prefer Apple's player
+                // for H.264 + AAC DASH streams; anything else (and any failure) stays on mpv.
+                if NativeStreamSelector.isEnabled,
+                   settingsManager?.audioOnlyModeEnabled != true,
+                   !nativePlayerFailedVideoIDs.contains(video.id.id),
+                   let native = NativeStreamSelector.select(
+                    from: streams,
+                    maxResolution: (settingsManager?.preferredQuality ?? .auto).maxResolution
+                   ) {
+                    selection = (native.video, native.audio, .avplayer)
+                }
 
                 guard let selected = selection.stream else {
                     throw APIError.noStreams
@@ -536,7 +551,15 @@ final class PlayerService {
             // Load stream
             // Pass EDL setting (MPV-specific: combines video+audio into single virtual file for unified caching)
             let useEDL = settingsManager?.mpvUseEDLStreams ?? true
-            try await backend.load(stream: selectedStream, audioStream: selectedAudioStream, autoplay: false, useEDL: useEDL)
+            do {
+                try await backend.load(stream: selectedStream, audioStream: selectedAudioStream, autoplay: false, useEDL: useEDL)
+            } catch where backendType == .avplayer && !(error is CancellationError) {
+                // FORK (native-player): the Apple player couldn't start this video - replay it on mpv.
+                LoggingService.shared.logPlayerError("Native player failed, falling back to mpv: \(video.id.id)", error: error)
+                nativePlayerFailedVideoIDs.insert(video.id.id)
+                await play(video: video, stream: stream, audioStream: audioStream, startTime: startTime, forceStartTime: forceStartTime)
+                return
+            }
 
             // Check for cancellation after stream load completes
             try Task.checkCancellation()
@@ -2569,6 +2592,12 @@ final class PlayerService {
         // Reuse existing backend if same type
         if let current = currentBackend, current.backendType == type {
             return current
+        }
+
+        // FORK (native-player): switching backend type (mpv <-> Apple player) must stop the old one.
+        if let current = currentBackend, current.backendType != type {
+            current.stop()
+            current.delegate = nil
         }
 
         // Create new backend

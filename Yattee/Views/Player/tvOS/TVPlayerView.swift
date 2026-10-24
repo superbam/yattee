@@ -638,7 +638,8 @@ struct TVPlayerView: View {
     @ViewBuilder
     private var videoLayer: some View {
         let isAudioOnly = playerState?.currentStream?.isAudioOnly == true
-        let hasBackend = playerService?.currentBackend is MPVBackend
+        // FORK (native-player): the Apple-player backend also counts as a backend.
+        let hasBackend = playerService?.currentBackend is MPVBackend || playerService?.currentBackend is AVPlayerBackend
 
         ZStack {
             if let playerService,
@@ -653,6 +654,12 @@ struct TVPlayerView: View {
                 // Keep the render view alive but hidden for audio-only
                 // playback so toggling audio mode doesn't tear down GL state
                 .opacity(isAudioOnly ? 0 : 1)
+            } else if let native = playerService?.currentBackend as? AVPlayerBackend {
+                // FORK (native-player)
+                NativePlayerRepresentable(backend: native)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .opacity(isAudioOnly ? 0 : 1)
             }
 
             // Thumbnail for audio-only playback and the pre-backend loading state

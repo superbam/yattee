@@ -21,6 +21,8 @@ struct AVSyncDiagnosticsView: View {
     @Environment(\.appEnvironment) private var appEnvironment
     // FORK (auto-av-sync)
     @AppStorage(TVRouteLatencyCompensation.enabledKey) private var autoCompensate = false
+    // FORK (native-player)
+    @AppStorage(NativeStreamSelector.enabledKey) private var useNativePlayer = false
 
     private let minDelayMs: Double = -500
     private let maxDelayMs: Double = 500
@@ -44,6 +46,10 @@ struct AVSyncDiagnosticsView: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
+
+            // FORK (native-player): experimental Apple player for 1080p H.264 videos.
+            // Takes effect on the next video; videos it can't play still use mpv.
+            Toggle("Use Apple player for H.264 videos (experimental)", isOn: $useNativePlayer)
 
             // FORK (auto-av-sync): automatic compensation for AirPlay / Bluetooth routes.
             Toggle("Automatic delay for wireless audio", isOn: $autoCompensate)

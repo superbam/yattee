@@ -1522,6 +1522,16 @@ private struct InvidiousAdaptiveFormat: Decodable, Sendable {
     let audioTrack: InvidiousAudioTrack?
     let audioQuality: String?
     let fps: Int?
+    // FORK (native-player): DASH byte ranges ("init"/"index" in the JSON).
+    let initRange: String?
+    let indexRange: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case url, itag, type, container, encoding, resolution, bitrate, clen
+        case audioTrack, audioQuality, fps
+        case initRange = "init"
+        case indexRange = "index"
+    }
 
     var isAudioOnly: Bool {
         type?.starts(with: "audio/") ?? false
@@ -1555,7 +1565,9 @@ private struct InvidiousAdaptiveFormat: Decodable, Sendable {
             audioLanguage: language,
             audioTrackName: trackName,
             isOriginalAudio: isOriginal,
-            fps: isAudioOnly ? nil : fps
+            fps: isAudioOnly ? nil : fps,
+            dashInitRange: initRange,  // FORK (native-player)
+            dashIndexRange: indexRange
         )
     }
 

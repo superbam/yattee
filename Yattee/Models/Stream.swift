@@ -79,6 +79,12 @@ struct Stream: Identifiable, Codable, Hashable, Sendable {
     /// Frame rate (fps) if known.
     let fps: Int?
 
+    /// FORK (native-player): byte ranges ("start-end") of the init segment and
+    /// sidx index of a DASH fragmented-MP4 stream, as listed by Invidious.
+    /// Needed to build an HLS playlist for Apple's player.
+    var dashInitRange: String?
+    var dashIndexRange: String?
+
     // MARK: - Initialization
 
     init(
@@ -96,7 +102,9 @@ struct Stream: Identifiable, Codable, Hashable, Sendable {
         audioTrackName: String? = nil,
         isOriginalAudio: Bool = false,
         httpHeaders: [String: String]? = nil,
-        fps: Int? = nil
+        fps: Int? = nil,
+        dashInitRange: String? = nil,
+        dashIndexRange: String? = nil
     ) {
         self.url = url
         self.resolution = resolution
@@ -113,6 +121,8 @@ struct Stream: Identifiable, Codable, Hashable, Sendable {
         self.isOriginalAudio = isOriginalAudio
         self.httpHeaders = httpHeaders
         self.fps = fps
+        self.dashInitRange = dashInitRange
+        self.dashIndexRange = dashIndexRange
     }
 
     // MARK: - Computed Properties
