@@ -63,13 +63,13 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
   every audio reconfig, added to the manual offset. HDMI is untouched. Toggle
   and live readout in A/V Sync Diagnostics.
 
-- **native-player** (tvOS, experimental, default OFF) — plays Invidious' H.264
+- **native-player** (tvOS, default ON) — plays Invidious' H.264
   (<=1080p) + AAC DASH streams through AVPlayer so tvOS keeps video and
   AirPlay/HomePod audio in sync by itself. `DASHToHLS` reads each stream's
   sidx (Invidious `init`/`index` ranges, carried on `Stream.dashInitRange` /
   `dashIndexRange`) and builds HLS playlists of byte ranges of the original
-  URLs, served to AVPlayer by a loopback server. Enabled by the toggle in
-  A/V Sync Diagnostics (`tvNativePlayerEnabled`). Live, VP9/AV1/Opus and
+  URLs, served to AVPlayer by a loopback server. On by default; the toggle in
+  A/V Sync Diagnostics (`tvNativePlayerEnabled`) turns it off. Live, VP9/AV1/Opus and
   anything without ranges stay on mpv; if the native backend fails to load a
   video, PlayerService replays it on mpv (`nativePlayerFailedVideoIDs`).
   Captions: external caption files (Caption.url, WebVTT/SRT) are parsed by

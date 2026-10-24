@@ -10,12 +10,12 @@
 import Foundation
 
 enum NativeStreamSelector {
-    /// UserDefaults key for the experimental tvOS switch (default off).
+    /// UserDefaults key for the tvOS switch (default on).
     static let enabledKey = "tvNativePlayerEnabled"
 
     static var isEnabled: Bool {
         #if os(tvOS)
-        UserDefaults.standard.bool(forKey: enabledKey)
+        UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
         #else
         false
         #endif
