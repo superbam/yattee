@@ -20,7 +20,7 @@ struct AVSyncDiagnosticsView: View {
     @Bindable var settings: SettingsManager
     @Environment(\.appEnvironment) private var appEnvironment
     // FORK (auto-av-sync)
-    @AppStorage(TVRouteLatencyCompensation.enabledKey) private var autoCompensate = true
+    @AppStorage(TVRouteLatencyCompensation.enabledKey) private var autoCompensate = false
 
     private let minDelayMs: Double = -500
     private let maxDelayMs: Double = 500

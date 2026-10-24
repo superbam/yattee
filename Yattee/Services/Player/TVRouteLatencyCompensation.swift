@@ -29,7 +29,7 @@ enum TVRouteLatencyCompensation {
     }
 
     static var isEnabled: Bool {
-        UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
+        UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? false
     }
 
     /// Snapshot of the current route and the compensation (milliseconds,
