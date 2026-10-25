@@ -47,6 +47,8 @@ struct InstanceBrowseView: View {
     @State private var hasMoreDiscoverResults = true
     @State private var isLoadingMoreDiscover = false
     @State private var discoverLoadedVideoCount = 0
+    /// FORK (startup-screen): when the app last went to the background.
+    @State private var backgroundedAt: Date?
     
     // View options (persisted per instance)
     @AppStorage var layout: VideoListLayout
@@ -497,6 +499,8 @@ struct InstanceBrowseView: View {
             loadWatchEntries()
         }
         .onChange(of: scenePhase) { _, newPhase in
+            // FORK (startup-screen): remember when the app left the foreground.
+            if newPhase == .background { backgroundedAt = Date() }
             guard newPhase == .active else { return }
             Task { await refreshOnResumeIfNeeded() }
         }
@@ -1326,7 +1330,19 @@ struct InstanceBrowseView: View {
     /// `scenePhase == .active` handling for Popular/Trending.
     private func refreshOnResumeIfNeeded() async {
         await refreshIfSafe()
+
+        // FORK (startup-screen): Discover is paginated, so it isn't refreshed on the
+        // periodic loop (that would yank the list mid-scroll). After a real absence
+        // the list is stale and nobody is mid-scroll, so reload it from page 1.
+        if selectedTab == .discover, !isInSearchMode,
+           let away = backgroundedAt, Date().timeIntervalSince(away) >= Self.discoverResumeRefreshAfter {
+            await startContentLoad(forceRefresh: true)
+        }
+        backgroundedAt = nil
     }
+
+    /// How long the app must have been away before Discover reloads on return.
+    private static let discoverResumeRefreshAfter: TimeInterval = 10 * 60
 
     /// Shared gate for both the periodic loop and the on-resume check.
     /// Playlists/search aren't "new videos populating" in the same sense as

@@ -75,10 +75,12 @@ struct TVSettingsTextField: View {
             } else {
                 TextField(title, text: $editText)
             }
+            // FORK (startup-screen): SwiftUI makes a `.cancel`-role button the alert's preferred
+            // action, which tvOS focuses first. A plain Cancel after OK leaves OK as the default.
             Button("common.ok") {
                 text = editText
             }
-            Button("common.cancel", role: .cancel) { }
+            Button("common.cancel") { }
         }
     }
 }

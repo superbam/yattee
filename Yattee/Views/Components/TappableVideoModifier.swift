@@ -102,6 +102,16 @@ struct TappableVideoModifier: ViewModifier {
         }
         .alert(String(localized: "common.authenticationRequired"), isPresented: $showingPasswordAlert) {
             SecureField(String(localized: "common.password"), text: $passwordInput)
+            #if os(tvOS)
+            // FORK (startup-screen): no `.cancel` role on tvOS so the primary action gets focus.
+            Button(String(localized: "common.connect")) {
+                savePasswordAndContinue()
+            }
+            Button(String(localized: "common.cancel")) {
+                passwordInput = ""
+                sourceNeedingPassword = nil
+            }
+            #else
             Button(String(localized: "common.cancel"), role: .cancel) {
                 passwordInput = ""
                 sourceNeedingPassword = nil
@@ -109,6 +119,7 @@ struct TappableVideoModifier: ViewModifier {
             Button(String(localized: "common.connect")) {
                 savePasswordAndContinue()
             }
+            #endif
         } message: {
             if let source = sourceNeedingPassword {
                 Text(String(localized: "common.enterPassword \(source.name)"))

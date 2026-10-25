@@ -90,8 +90,16 @@ private struct CustomizationSection: View {
                 Label(String(localized: "settings.appearance.home.customize"), systemImage: SidebarItem.home.systemImage)
             }
 
-            Toggle(isOn: $settings.tvOSOpenToSubscriptionsAtLaunch) {
-                Label("Open to Subscriptions at Launch", systemImage: "play.square.stack.fill")
+            // FORK (startup-screen): pick any startup screen, including Feed and Discover.
+            Picker(selection: Binding(
+                get: { settings.sidebarStartupTab },
+                set: { settings.chooseStartupScreen($0) }
+            )) {
+                ForEach(settings.startupScreenChoices()) { item in
+                    Text(item.localizedTitle).tag(item)
+                }
+            } label: {
+                Label(String(localized: "settings.sidebar.startup.tab"), systemImage: "arrow.up.forward.app")
             }
             #else
             SettingsNavigationRow("settings.appearance.home.customize", systemImage: SidebarItem.home.systemImage) {

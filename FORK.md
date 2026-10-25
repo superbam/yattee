@@ -76,7 +76,16 @@ Every inline edit in an upstream file is tagged with a `// FORK:` (or
   `NativeCaptionParser` and drawn by the backend's own label using the
   subtitle appearance settings. Not implemented yet: embedded track picker, PiP.
 
+- **startup-screen** (tvOS) — Layout & Navigation has a Startup Screen picker
+  (replaces the Subscriptions-only toggle) that also offers Feed, Discover and
+  Subscriptions and un-hides the chosen sidebar item
+  (`SettingsManager+StartupScreen.swift`). Discover reloads from page 1 when the
+  app returns after 10+ minutes in the background (Feed already refreshes on
+  every resume). `TVSettingsTextField`'s alert has a plain Cancel so OK gets focus.
+
 ## New files (fork-owned, conflict-free)
+
+- `Yattee/Core/Settings/SettingsManager+StartupScreen.swift` — startup-screen.
 
 - `Yattee/Services/Player/Native/` — native-player: `DASHToHLS`,
   `LoopbackPlaylistServer`, `NativeStreamSelector`, `NativeCaptionParser`,
