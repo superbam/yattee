@@ -43,6 +43,7 @@ final class SettingsManager {
     var _playerVolume: Float?
     var _resumeAction: ResumeAction?
     var _tvOSMenuButtonClosesVideo: Bool?
+    var _tvOSReturnWhenVideoEnds: Bool?
     var _allowSoftwareDecodedFormats: Bool?
     var _audioOnlyModeEnabled: Bool?
 
@@ -448,6 +449,7 @@ final class SettingsManager {
         _playerVolume = nil
         _resumeAction = nil
         _tvOSMenuButtonClosesVideo = nil
+        _tvOSReturnWhenVideoEnds = nil
         _allowSoftwareDecodedFormats = nil
         _audioOnlyModeEnabled = nil
         _sponsorBlockEnabled = nil

@@ -696,7 +696,7 @@ struct UnifiedPlaylistDetailView: View {
                 }
             } else {
                 Button(String(localized: "playlist.notFound.openPlaylists")) {
-                    appEnvironment?.navigationCoordinator.router.select(.playlistsList)
+                    appEnvironment?.navigationCoordinator.selectedSidebarItem = .playlistsList
                 }
             }
             #endif

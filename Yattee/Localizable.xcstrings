@@ -13288,6 +13288,16 @@
         }
       }
     },
+    "settings.playback.tvOSReturnWhenVideoEnds" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Return When Video Ends"
+          }
+        }
+      }
+    },
     "settings.playback.tvSyncDiagnostics.footer" : {
       "localizations" : {
         "en" : {

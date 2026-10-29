@@ -70,6 +70,20 @@ extension SettingsManager {
         }
     }
 
+    /// tvOS only: when enabled, a video that ends with nothing to play next
+    /// closes the player and returns to the screen it was launched from,
+    /// instead of showing the replay controls.
+    var tvOSReturnWhenVideoEnds: Bool {
+        get {
+            if let cached = _tvOSReturnWhenVideoEnds { return cached }
+            return bool(for: .tvOSReturnWhenVideoEnds, default: false)
+        }
+        set {
+            _tvOSReturnWhenVideoEnds = newValue
+            set(newValue, for: .tvOSReturnWhenVideoEnds)
+        }
+    }
+
     var allowSoftwareDecodedFormats: Bool {
         get {
             if let cached = _allowSoftwareDecodedFormats { return cached }

@@ -28,6 +28,7 @@ enum SettingsKey: String, CaseIterable {
     case preferredSubtitlesLanguage
     case resumeAction
     case tvOSMenuButtonClosesVideo
+    case tvOSReturnWhenVideoEnds
     case allowSoftwareDecodedFormats
     case audioOnlyMode
 

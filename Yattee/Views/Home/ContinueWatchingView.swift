@@ -224,7 +224,7 @@ struct ContinueWatchingView: View {
             // Without a focusable element the focus engine has nowhere to
             // land, and the remote can no longer reach the sidebar either.
             Button {
-                appEnvironment?.navigationCoordinator.router.select(.search)
+                appEnvironment?.navigationCoordinator.selectedSidebarItem = .search
             } label: {
                 Label(String(localized: "continueWatching.empty.search"), systemImage: "magnifyingglass")
             }

@@ -1089,6 +1089,9 @@ struct TVPlayerView: View {
 
         if autoPlayEnabled && hasNextVideo {
             startAutoplayCountdown()
+        } else if appEnvironment?.settingsManager.tvOSReturnWhenVideoEnds == true {
+            // Nothing left to play: go back to the screen the video was launched from
+            closeVideo()
         } else {
             // No next video or autoplay disabled - show controls with replay option
             showControls()

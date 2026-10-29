@@ -286,6 +286,11 @@ private struct BehaviorSection: View {
                 String(localized: "settings.playback.tvOSMenuButtonClosesVideo"),
                 isOn: $settings.tvOSMenuButtonClosesVideo
             )
+
+            Toggle(
+                String(localized: "settings.playback.tvOSReturnWhenVideoEnds"),
+                isOn: $settings.tvOSReturnWhenVideoEnds
+            )
             #endif
         }
     }
