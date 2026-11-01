@@ -81,7 +81,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
                     self.handleDownloadError(
                         downloadID: taskInfo.downloadID,
                         phase: taskInfo.phase,
-                        error: DownloadError.downloadFailed("Server returned HTTP \(statusCode)")
+                        error: DownloadError.httpStatus(statusCode)
                     )
                 }
                 return
@@ -213,8 +213,12 @@ extension DownloadManager: URLSessionDownloadDelegate {
     }
 
     nonisolated func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
-        // Called when all background tasks are complete
-        // Could be used to update UI or show notification
+        // The system relaunched or woke the app to deliver events that finished while
+        // it was suspended. Once they're all delivered, tell it we're done so it can
+        // snapshot the UI and suspend us again.
+        DispatchQueue.main.async {
+            Self.finishBackgroundEvents()
+        }
     }
 }
 

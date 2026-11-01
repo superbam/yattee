@@ -275,6 +275,7 @@ final class AppEnvironment {
         remoteControl.setToastManager(toast)
         self.downloadManager.setToastManager(toast)
         self.downloadManager.setDownloadSettings(self.downloadSettings)
+        self.downloadManager.setStreamRefreshDependencies(contentService: contentSvc, instancesManager: instances)
         // FORK (offline-sponsorblock): let the download manager capture SponsorBlock
         // segments at download time so sponsor skipping works offline.
         self.downloadManager.setSponsorBlockDependencies(

@@ -52,6 +52,27 @@ final class DownloadManager: NSObject {
     /// Downloads are added when enqueued and removed when completed, failed, or cancelled.
     var batchDownloadIDs: Set<UUID> = []
 
+    /// Used to ask the instance for fresh stream URLs when a stored link has expired.
+    weak var streamRefreshContentService: ContentService?
+    weak var streamRefreshInstancesManager: InstancesManager?
+
+    /// Downloads whose links were already refreshed this attempt. A second expired-link
+    /// response after a refresh is treated as a normal failure rather than looping.
+    var refreshedLinkDownloadIDs: Set<UUID> = []
+
+    /// Downloads currently waiting on a link refresh. Errors from their old tasks are ignored.
+    var refreshingLinkDownloadIDs: Set<UUID> = []
+
+    /// Completion handler the system hands us when it relaunches the app for background
+    /// URLSession events. Must be called once every pending event has been delivered.
+    static var pendingBackgroundCompletionHandler: (() -> Void)?
+
+    static func finishBackgroundEvents() {
+        let handler = pendingBackgroundCompletionHandler
+        pendingBackgroundCompletionHandler = nil
+        handler?()
+    }
+
     /// Retry delays between attempts (3 delays = 4 total attempts).
     /// Matches playback retry timing for consistency.
     let retryDelays: [TimeInterval] = [1, 3, 5]
@@ -572,7 +593,7 @@ final class DownloadManager: NSObject {
 
     /// Selects the best video stream up to the specified quality.
     /// Respects device hardware capabilities when selecting codecs.
-    private func selectBestVideoStream(
+    func selectBestVideoStream(
         from streams: [Stream],
         maxQuality: DownloadQuality
     ) -> Stream? {
@@ -612,7 +633,7 @@ final class DownloadManager: NSObject {
     }
 
     /// Selects the best audio stream for the preferred language.
-    private func selectBestAudioStream(
+    func selectBestAudioStream(
         from streams: [Stream],
         preferredLanguage: String?
     ) -> Stream? {
@@ -778,9 +799,14 @@ final class DownloadManager: NSObject {
         activeDownloads[index].status = .queued
         activeDownloads[index].error = nil
         activeDownloads[index].retryCount = 0  // Reset retry count on manual resume
+        refreshedLinkDownloadIDs.remove(download.id)
         saveDownloads()
 
         LoggingService.shared.logDownload("Resumed: \(download.videoID.id)")
+
+        // The stored links may have expired while this sat paused or failed. Best effort:
+        // if the refresh fails, fall back to the stored URLs and let the 403 path handle it.
+        await refreshStreamURLs(for: download.id)
         await startNextDownloadIfNeeded()
     }
 
@@ -812,6 +838,8 @@ final class DownloadManager: NSObject {
         activeDownloads.removeAll { $0.id == download.id }
         downloadingVideoIDs.remove(download.videoID)
         downloadProgressByVideo.removeValue(forKey: download.videoID)
+        refreshedLinkDownloadIDs.remove(download.id)
+        refreshingLinkDownloadIDs.remove(download.id)
 
         // Remove from batch tracking if this was a batch download
         batchDownloadIDs.remove(download.id)
@@ -1311,6 +1339,7 @@ final class DownloadManager {
     func videoAndStream(for videoID: VideoID) -> (video: Video, stream: Stream, audioStream: Stream?, captionURL: URL?, dislikeCount: Int?)? { nil }
     func setToastManager(_ manager: ToastManager) {}
     func setDownloadSettings(_ settings: DownloadSettings) {}
+    func setStreamRefreshDependencies(contentService: ContentService, instancesManager: InstancesManager) {}
     func setSponsorBlockDependencies(api: SponsorBlockAPI, settingsManager: SettingsManager) {} // FORK (offline-sponsorblock)
     func downloadsDirectory() -> URL { URL(fileURLWithPath: NSTemporaryDirectory()) }
 }

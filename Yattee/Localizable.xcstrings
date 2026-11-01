@@ -2565,6 +2565,26 @@
         }
       }
     },
+    "downloads.tracker.accessibilityLabel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloads in progress"
+          }
+        }
+      }
+    },
+    "downloads.error.linkExpired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The download link expired and could not be refreshed."
+          }
+        }
+      }
+    },
     "downloads.title" : {
       "comment" : "Downloads screen title",
       "localizations" : {
@@ -18406,6 +18426,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Download Completed (Some Assets Failed)"
+          }
+        }
+      }
+    },
+    "toast.download.failed.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download Failed"
           }
         }
       }

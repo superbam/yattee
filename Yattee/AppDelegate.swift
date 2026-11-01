@@ -49,6 +49,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(
         _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        // The download session is recreated at launch (AppEnvironment); once it has
+        // delivered its pending events it calls this handler (DownloadManager).
+        LoggingService.shared.logDownload("[Downloads] Relaunched for background session events: \(identifier)")
+        DownloadManager.pendingBackgroundCompletionHandler = completionHandler
+    }
+
+    func application(
+        _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
         return OrientationManager.shared.supportedOrientations

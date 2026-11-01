@@ -750,6 +750,11 @@ extension DownloadManager {
         if download.localThumbnailPath != nil { details += ", Thumbnail: \(download.localThumbnailPath!)" }
         LoggingService.shared.logDownload("Completed: \(download.videoID.id)", details: details)
 
+        refreshedLinkDownloadIDs.remove(downloadID)
+        if !wasBatchDownload {
+            notifyDownloadFinishedInBackground(title: download.title, failed: false)
+        }
+
         // Only show individual toast for non-batch downloads
         if !wasBatchDownload {
             if download.warnings.isEmpty {
@@ -792,6 +797,19 @@ extension DownloadManager {
         }
 
         let download = activeDownloads[index]
+
+        // An expired-link refresh is already restarting every transfer for this download.
+        if refreshingLinkDownloadIDs.contains(downloadID) { return }
+
+        // The stored URL itself was rejected (expired or invalid signature): retrying it
+        // can't work, so fetch fresh URLs once and restart instead of burning retries.
+        if phase == .video || phase == .audio,
+           (error as? DownloadError)?.isExpiredLink == true,
+           !refreshedLinkDownloadIDs.contains(downloadID) {
+            refreshingLinkDownloadIDs.insert(downloadID)
+            Task { await refreshLinksAndRestart(downloadID: downloadID) }
+            return
+        }
 
         // Remove task for this phase
         switch phase {
@@ -913,6 +931,7 @@ extension DownloadManager {
                     captionTasks.removeValue(forKey: downloadID)
                 }
 
+                refreshedLinkDownloadIDs.remove(downloadID)
                 activeDownloads[index].status = .failed
                 activeDownloads[index].error = "\(phase.rawValue): \(error.localizedDescription)"
 
@@ -921,6 +940,7 @@ extension DownloadManager {
                     error: error
                 )
                 saveDownloads()
+                notifyDownloadFinishedInBackground(title: download.title, failed: true)
 
                 Task {
                     await startNextDownloadIfNeeded()

@@ -26,10 +26,12 @@ struct Download: Identifiable, Codable, Sendable, Equatable {
     let dislikeCount: Int?
     let publishedAt: Date?
     let publishedText: String?
-    let streamURL: URL
+    /// Stream URLs expire (YouTube links last a few hours), so they are refreshed
+    /// from the instance when a download hits an expired-link response.
+    var streamURL: URL
 
     /// Optional separate audio stream URL (for video-only streams)
-    let audioStreamURL: URL?
+    var audioStreamURL: URL?
     /// Optional caption URL for subtitle download
     let captionURL: URL?
     /// Language code for the audio track (e.g., "en", "ja")
@@ -37,7 +39,7 @@ struct Download: Identifiable, Codable, Sendable, Equatable {
     /// Language code for the caption (e.g., "en", "de")
     let captionLanguage: String?
     /// Custom HTTP headers required for downloading (cookies, referer, etc.)
-    let httpHeaders: [String: String]?
+    var httpHeaders: [String: String]?
     /// Storyboard metadata for offline seek preview
     let storyboard: Storyboard?
     /// FORK (offline-sponsorblock): SponsorBlock segments captured at download

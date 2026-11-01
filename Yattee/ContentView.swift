@@ -29,6 +29,7 @@ struct ContentView: View {
             }
         }
         .toastOverlay()
+        .downloadTrackerOverlay()
     }
 
     // MARK: - Unified Content View (macOS 15+, tvOS 18+)
