@@ -943,7 +943,9 @@ extension InvidiousAPI {
         // URLs). Don't second-guess that here by host-rewriting CDN URLs.
         if instance.type == .yatteeServer { return streams }
 
-        LoggingService.shared.info("Proxying streams through \(instance.displayName) (user-enabled)", category: .player)
+        if streams.contains(where: { !$0.isDirect && isYouTubeCDNURL($0.url) }) {
+            LoggingService.shared.info("Proxying streams through \(instance.displayName) (user-enabled)", category: .player)
+        }
 
         return streams.map { stream in
             if isYouTubeCDNURL(stream.url), !stream.isDirect {

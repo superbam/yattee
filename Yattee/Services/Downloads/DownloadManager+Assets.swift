@@ -99,7 +99,7 @@ extension DownloadManager {
 
                     if let vttURL {
                         do {
-                            let (vttData, response) = try await URLSession.shared.data(from: vttURL)
+                            let (vttData, response) = try await URLSession.shared.data(for: InstanceRequestAuth.shared.request(for: vttURL))
                             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
                             imageURLs = parseVTTForImageURLs(vttData, baseURL: vttURL)
                             LoggingService.shared.debug(
@@ -168,7 +168,7 @@ extension DownloadManager {
                 }
 
                 do {
-                    let (data, response) = try await URLSession.shared.data(from: sheetURL)
+                    let (data, response) = try await URLSession.shared.data(for: InstanceRequestAuth.shared.request(for: sheetURL))
 
                     guard let httpResponse = response as? HTTPURLResponse,
                           httpResponse.statusCode == 200 else {
@@ -393,7 +393,7 @@ extension DownloadManager {
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(for: InstanceRequestAuth.shared.request(for: url))
 
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200,

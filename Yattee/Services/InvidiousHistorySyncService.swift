@@ -322,7 +322,8 @@ final class InvidiousHistorySyncService {
     /// video the instance can't resolve) are skipped and retried on the next
     /// sync. Steady state is a no-op once every watched video has a local row.
     private func hydrateWatchedEntries(watchedIDs: [String], instance: Instance) async {
-        let missing = dataManager.videoIDsWithoutWatchEntry(among: watchedIDs)
+        let tracker = UnresolvableVideoTracker()
+        let missing = dataManager.videoIDsWithoutWatchEntry(among: watchedIDs).filter { !tracker.shouldSkip($0) }
         guard !missing.isEmpty else { return }
         let toFetch = Array(missing.prefix(maxHydrationPerSync))
         LoggingService.shared.info(
@@ -331,28 +332,39 @@ final class InvidiousHistorySyncService {
         )
 
         var fetched: [Video] = []
+        var permanentlyUnavailable: [String] = []
         var index = 0
         while index < toFetch.count {
             let end = min(index + maxHydrationConcurrency, toFetch.count)
             let batch = Array(toFetch[index..<end])
             index = end
-            await withTaskGroup(of: Video?.self) { group in
+            await withTaskGroup(of: (id: String, video: Video?, permanent: Bool).self) { group in
                 for id in batch {
                     let api = invidiousAPI
                     group.addTask {
-                        try? await api.video(id: id, instance: instance)
+                        do {
+                            return (id, try await api.video(id: id, instance: instance), false)
+                        } catch {
+                            return (id, nil, UnresolvableVideoTracker.isPermanent(error))
+                        }
                     }
                 }
-                for await video in group {
-                    if let video { fetched.append(video) }
+                for await result in group {
+                    if let video = result.video {
+                        fetched.append(video)
+                    } else if result.permanent {
+                        permanentlyUnavailable.append(result.id)
+                    }
                 }
             }
         }
 
         dataManager.createFinishedEntriesFromSync(videos: fetched)
+        tracker.record(permanentlyUnavailable)
+        let transient = toFetch.count - fetched.count - permanentlyUnavailable.count
         LoggingService.shared.info(
             "Invidious history sync: created \(fetched.count) watched history rows from metadata " +
-                "(\(toFetch.count - fetched.count) failed, will retry next sync)",
+                "(\(permanentlyUnavailable.count) unavailable, skipped for 7 days; \(transient) failed, will retry next sync)",
             category: .api
         )
     }

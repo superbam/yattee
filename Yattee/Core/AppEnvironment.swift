@@ -490,9 +490,11 @@ final class AppEnvironment {
     /// for any instance currently reached through its external address.
     static func refreshInstanceRequestAuth(instancesManager: InstancesManager, basicAuth: BasicAuthCredentialsManager) {
         var headers: [String: String] = [:]
-        for instance in instancesManager.instances where instance.isUsingExternalAddress {
-            if let host = instance.url.host?.lowercased(),
-               let header = basicAuth.basicAuthHeader(for: instance) {
+        // Keyed by the external host, whichever address is active: content fetched while away
+        // (queued downloads, cached links) can still be requested after coming home.
+        for instance in instancesManager.instances {
+            guard let external = instance.externalURL, let host = external.host?.lowercased() else { continue }
+            if let header = basicAuth.basicAuthHeader(for: instance.withURL(external)) {
                 headers[host] = header
             }
         }

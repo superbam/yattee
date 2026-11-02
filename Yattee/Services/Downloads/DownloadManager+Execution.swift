@@ -183,6 +183,10 @@ extension DownloadManager {
                 }
             }
 
+            // Captions (and anything else served by an instance behind a reverse proxy)
+            // need the key even when the stream itself comes straight from YouTube.
+            request = InstanceRequestAuth.shared.authorized(request)
+
             let (newTask, caughtException) = makeDownloadTask { $0.downloadTask(with: request) }
 
             guard let newTask else {
