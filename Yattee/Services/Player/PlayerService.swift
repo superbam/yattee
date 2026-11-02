@@ -2250,7 +2250,7 @@ final class PlayerService {
         self.originalStreams = result.streams
 
         // Apply proxy URL rewriting when the instance's "Proxy videos" toggle is on
-        let streams = InvidiousAPI.proxyStreamsIfNeeded(result.streams, instance: instance)
+        let streams = await contentService.proxiedStreams(result.streams, instance: instance)
 
         return (result.video, streams, result.captions, result.storyboards)
     }
@@ -2262,7 +2262,7 @@ final class PlayerService {
               let video = state.currentVideo,
               let instance = try? await findInstance(for: video) else { return }
 
-        let newStreams = InvidiousAPI.proxyStreamsIfNeeded(originalStreams, instance: instance)
+        let newStreams = await contentService.proxiedStreams(originalStreams, instance: instance)
 
         // Update available streams (preserve any downloaded/local file streams)
         let downloadedStreams = availableStreams.filter { $0.url.isFileURL }

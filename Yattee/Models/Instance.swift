@@ -55,8 +55,16 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
     /// The type of this instance.
     let type: InstanceType
 
-    /// The base URL of the instance.
-    let url: URL
+    /// The base URL of the instance. For an instance with an `externalURL` this is the
+    /// address currently in use: `InstancesManager` hands out copies whose `url` is
+    /// swapped to the external address while the home address is unreachable. The
+    /// configured home address is what gets stored and synced.
+    var url: URL
+
+    /// Optional second address for the same server, used when `url` can't be reached
+    /// (typically a public hostname for when you're away from the home network).
+    /// Both addresses are the same instance: one login, one feed, one history.
+    var externalURL: URL?
 
     /// Optional user-defined name for this instance.
     var name: String?
@@ -110,7 +118,8 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         proxiesVideos: Bool = false,
         isShortsFilterFork: Bool? = nil,
         usesBasicAuth: Bool = false,
-        usesAccountLogin: Bool = false
+        usesAccountLogin: Bool = false,
+        externalURL: URL? = nil
     ) {
         self.id = id
         self.type = type
@@ -124,6 +133,7 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         self.isShortsFilterFork = isShortsFilterFork
         self.usesBasicAuth = usesBasicAuth
         self.usesAccountLogin = usesAccountLogin
+        self.externalURL = externalURL
     }
 
     init(from decoder: Decoder) throws {
@@ -140,9 +150,31 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         isShortsFilterFork = try container.decodeIfPresent(Bool.self, forKey: .isShortsFilterFork)
         usesBasicAuth = try container.decodeIfPresent(Bool.self, forKey: .usesBasicAuth) ?? false
         usesAccountLogin = try container.decodeIfPresent(Bool.self, forKey: .usesAccountLogin) ?? false
+        externalURL = try container.decodeIfPresent(URL.self, forKey: .externalURL)
     }
 
     // MARK: - Computed Properties
+
+    /// Whether this copy of the instance currently points at its external address.
+    var isUsingExternalAddress: Bool {
+        guard let externalURL else { return false }
+        return url == externalURL
+    }
+
+    /// Whether video streams should be routed through this instance. Always true on the
+    /// external address: YouTube stream links are tied to the server's IP, so they only
+    /// work away from home when relayed through the server.
+    var effectiveProxiesVideos: Bool {
+        proxiesVideos || isUsingExternalAddress
+    }
+
+    /// A copy of this instance pointing at a different address. Same identity, so logins,
+    /// cached feeds and sync state carry over.
+    func withURL(_ newURL: URL) -> Instance {
+        var copy = self
+        copy.url = newURL
+        return copy
+    }
 
     var displayName: String {
         name ?? url.host ?? url.absoluteString

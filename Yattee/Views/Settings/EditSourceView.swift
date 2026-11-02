@@ -35,6 +35,7 @@ private struct EditRemoteServerContent: View {
     @State private var isEnabled: Bool
     @State private var allowInvalidCertificates: Bool
     @State private var proxiesVideos: Bool
+    @State private var externalAddress: String
 
     // HTTP Basic Auth credentials (for any instance type behind a reverse proxy;
     // required for Yattee Server, optional for Invidious/Piped/PeerTube).
@@ -65,6 +66,7 @@ private struct EditRemoteServerContent: View {
         _isEnabled = State(initialValue: instance.isEnabled)
         _allowInvalidCertificates = State(initialValue: instance.allowInvalidCertificates)
         _proxiesVideos = State(initialValue: instance.proxiesVideos)
+        _externalAddress = State(initialValue: instance.externalURL?.absoluteString ?? "")
     }
 
     var body: some View {
@@ -98,11 +100,64 @@ private struct EditRemoteServerContent: View {
         #endif
     }
 
+    /// The instance as configured, with its home address (the list passes a copy whose
+    /// address may be swapped to the external one).
+    private var configuredInstance: Instance {
+        appEnvironment?.instancesManager.storedInstance(id: instance.id) ?? instance
+    }
+
+    private var isExternalAddressValid: Bool {
+        let trimmed = externalAddress.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return true }
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), url.host != nil else { return false }
+        return scheme == "https" || scheme == "http"
+    }
+
+    @ViewBuilder
+    private var externalAddressSection: some View {
+        Section {
+            #if os(tvOS)
+            TVSettingsTextField(title: String(localized: "sources.field.externalAddress"), text: $externalAddress)
+            #elseif os(macOS)
+            LabeledContent(String(localized: "sources.field.externalAddress")) {
+                TextField("https://", text: $externalAddress)
+                    .autocorrectionDisabled()
+            }
+            #else
+            TextField(String(localized: "sources.field.externalAddress"), text: $externalAddress)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            #endif
+
+            if !isExternalAddressValid {
+                Text(String(localized: "sources.field.externalAddress.invalid"))
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+
+            if instance.externalURL != nil {
+                LabeledContent(
+                    String(localized: "sources.field.currentAddress"),
+                    value: instance.isUsingExternalAddress
+                        ? String(localized: "sources.field.currentAddress.external")
+                        : String(localized: "sources.field.currentAddress.home")
+                )
+            }
+        } footer: {
+            Text(String(localized: "sources.field.externalAddress.footer"))
+        }
+    }
+
     private var formContent: some View {
         Form {
             Section {
                 LabeledContent(String(localized: "sources.field.type"), value: instance.type.displayName)
-                LabeledContent(String(localized: "sources.field.url"), value: instance.displayURL)
+                LabeledContent(String(localized: "sources.field.url"), value: configuredInstance.displayURL)
+            }
+
+            if instance.isYouTubeInstance, !instance.isYatteeServerInstance {
+                externalAddressSection
             }
 
             Section {
@@ -431,6 +486,7 @@ private struct EditRemoteServerContent: View {
     }
 
     private func saveChanges() {
+        guard isExternalAddressValid else { return }
         // Check if we're enabling a Yattee Server instance
         let wasDisabled = !instance.isEnabled
         let willBeEnabled = isEnabled
@@ -450,8 +506,12 @@ private struct EditRemoteServerContent: View {
     private func performSave() {
         // Start from the manager's latest copy so flags updated while this sheet
         // was open (e.g. usesAccountLogin set by the login sheet) are preserved.
-        var updated = appEnvironment?.instancesManager.instances.first { $0.id == instance.id } ?? instance
+        var updated = appEnvironment?.instancesManager.storedInstance(id: instance.id) ?? instance
         updated.name = name.isEmpty ? nil : name
+        if instance.isYouTubeInstance, !instance.isYatteeServerInstance {
+            let trimmed = externalAddress.trimmingCharacters(in: .whitespaces)
+            updated.externalURL = trimmed.isEmpty ? nil : (isExternalAddressValid ? URL(string: trimmed) : updated.externalURL)
+        }
         updated.isEnabled = isEnabled
         updated.allowInvalidCertificates = allowInvalidCertificates
         updated.proxiesVideos = proxiesVideos

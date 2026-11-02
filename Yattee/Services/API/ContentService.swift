@@ -251,7 +251,14 @@ actor ContentService: ContentServiceProtocol {
                 .proxyStreams(videoID: videoID, instance: instance, mode: .download)
         }
         let fetchedStreams = try await streams(videoID: videoID, instance: instance)
-        return InvidiousAPI.proxyStreamsIfNeeded(fetchedStreams, instance: instance)
+        return await proxiedStreams(fetchedStreams, instance: instance)
+    }
+
+    /// Applies "proxy videos" URL rewriting, including the instance's basic-auth credentials
+    /// so the player and downloader can fetch the relayed URLs.
+    func proxiedStreams(_ streams: [Stream], instance: Instance) async -> [Stream] {
+        let authorization = await basicAuthCredentialsManager?.basicAuthHeader(for: instance)
+        return InvidiousAPI.proxyStreamsIfNeeded(streams, instance: instance, authorization: authorization)
     }
 
     /// Fetches video details + streams for downloads. For Yattee Server this routes
@@ -262,7 +269,7 @@ actor ContentService: ContentServiceProtocol {
                 .videoWithProxyStreamsAndCaptionsAndStoryboards(id: id, instance: instance, mode: .download)
         }
         var result = try await videoWithStreamsAndCaptionsAndStoryboards(id: id, instance: instance)
-        result.streams = InvidiousAPI.proxyStreamsIfNeeded(result.streams, instance: instance)
+        result.streams = await proxiedStreams(result.streams, instance: instance)
         return result
     }
 
@@ -285,7 +292,7 @@ actor ContentService: ContentServiceProtocol {
             // (Range-friendly, fast TTFB). When off, leave routing to the server's
             // per-site proxy_streaming flag — the server can still proxy by default,
             // but the client doesn't force it on top.
-            if instance.proxiesVideos {
+            if instance.effectiveProxiesVideos {
                 return try await yatteeServerAPI(for: instance)
                     .videoWithProxyStreamsAndCaptionsAndStoryboards(id: id, instance: instance, mode: .relay)
             }

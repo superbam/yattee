@@ -934,8 +934,8 @@ extension InvidiousAPI {
     ///   - streams: The original streams from the API
     ///   - instance: The instance to proxy through
     /// - Returns: Streams with YouTube CDN URLs rewritten when proxying is enabled
-    static func proxyStreamsIfNeeded(_ streams: [Stream], instance: Instance) -> [Stream] {
-        guard instance.supportsVideoProxying, instance.proxiesVideos else { return streams }
+    static func proxyStreamsIfNeeded(_ streams: [Stream], instance: Instance, authorization: String? = nil) -> [Stream] {
+        guard instance.supportsVideoProxying, instance.effectiveProxiesVideos else { return streams }
         // Yattee Server does proxying server-side via the ?proxy=true query
         // on the videos endpoint (the converter mints signed /proxy/relay
         // URLs). Don't second-guess that here by host-rewriting CDN URLs.
@@ -945,7 +945,12 @@ extension InvidiousAPI {
 
         return streams.map { stream in
             if isYouTubeCDNURL(stream.url) {
-                return stream.withURL(proxiedURL(instance: instance, originalURL: stream.url))
+                // The instance may sit behind a basic-auth reverse proxy; the player and
+                // downloader fetch the relayed URL themselves, so they need the credentials.
+                return stream.withURL(
+                    proxiedURL(instance: instance, originalURL: stream.url),
+                    extraHeaders: authorization.map { ["Authorization": $0] }
+                )
             }
             return stream
         }

@@ -240,6 +240,11 @@ final class BasicAuthCredentialsManager: InstanceCredentialsManager {
     /// - Parameter instance: The instance
     /// - Returns: The Authorization header value (e.g., "Basic dXNlcjpwYXNz") or nil if no credentials
     func basicAuthHeader(for instance: Instance) -> String? {
+        // With a second (external) address configured, the credentials belong to the
+        // public reverse proxy in front of it; the home address doesn't use them.
+        if instance.externalURL != nil, !instance.isUsingExternalAddress, instance.type != .yatteeServer {
+            return nil
+        }
         guard let creds = credentials(for: instance) else { return nil }
         let credentials = "\(creds.username):\(creds.password)"
         guard let data = credentials.data(using: .utf8) else { return nil }

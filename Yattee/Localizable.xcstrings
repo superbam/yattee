@@ -16557,6 +16557,66 @@
         }
       }
     },
+    "sources.field.externalAddress" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "External Address"
+          }
+        }
+      }
+    },
+    "sources.field.externalAddress.invalid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a full address starting with https:// or http://."
+          }
+        }
+      }
+    },
+    "sources.field.externalAddress.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional second address for this same server, used automatically when the main address can't be reached (for example away from home). Logins, feeds and history stay the same. Video is relayed through the server on this address, and the HTTP Basic Auth login above applies only to it."
+          }
+        }
+      }
+    },
+    "sources.field.currentAddress" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Using"
+          }
+        }
+      }
+    },
+    "sources.field.currentAddress.home" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Main address"
+          }
+        }
+      }
+    },
+    "sources.field.currentAddress.external" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "External address"
+          }
+        }
+      }
+    },
     "sources.field.enabled" : {
       "comment" : "Field label for enabled toggle",
       "localizations" : {

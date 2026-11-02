@@ -236,8 +236,13 @@ extension Stream {
 extension Stream {
     /// Creates a copy of this stream with a different URL.
     /// Used for proxying streams through an instance.
-    func withURL(_ newURL: URL) -> Stream {
-        Stream(
+    /// - Parameter extraHeaders: Headers to add to the stream's existing ones (e.g. proxy credentials).
+    func withURL(_ newURL: URL, extraHeaders: [String: String]? = nil) -> Stream {
+        let mergedHeaders: [String: String]? = {
+            guard let extraHeaders, !extraHeaders.isEmpty else { return httpHeaders }
+            return (httpHeaders ?? [:]).merging(extraHeaders) { _, new in new }
+        }()
+        return Stream(
             url: newURL,
             resolution: resolution,
             format: format,
@@ -251,7 +256,7 @@ extension Stream {
             audioLanguage: audioLanguage,
             audioTrackName: audioTrackName,
             isOriginalAudio: isOriginalAudio,
-            httpHeaders: httpHeaders,
+            httpHeaders: mergedHeaders,
             fps: fps
         )
     }
