@@ -198,7 +198,7 @@ actor StoryboardService {
         defer { loadingVTT.remove(vttURL) }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: vttURL)
+            let (data, response) = try await URLSession.shared.data(for: InstanceRequestAuth.shared.request(for: vttURL))
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200
             else {
@@ -373,7 +373,7 @@ actor StoryboardService {
                 data = try Data(contentsOf: url)
             } else {
                 // Network request
-                let (networkData, response) = try await URLSession.shared.data(from: url)
+                let (networkData, response) = try await URLSession.shared.data(for: InstanceRequestAuth.shared.request(for: url))
                 guard let httpResponse = response as? HTTPURLResponse,
                       httpResponse.statusCode == 200 else {
                     return

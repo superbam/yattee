@@ -66,8 +66,9 @@ final class ImageLoadingService: Sendable {
         config.dataCache = dataCache
         config.imageCache = imageCache
 
-        // Use default URLSession-based data loader
-        config.dataLoader = DataLoader(configuration: .default)
+        // Default URLSession-based data loader, plus the reverse-proxy credentials for
+        // instances reached through their external address.
+        config.dataLoader = AuthorizingDataLoader(base: DataLoader(configuration: .default))
 
         // Set as shared pipeline with a delegate that normalizes cache keys
         // so signed thumbnail URLs whose only difference is a rotating `token`
@@ -136,6 +137,27 @@ final class ImageLoadingService: Sendable {
 
 /// Pipeline delegate that normalizes Nuke's cache key by stripping per-request
 /// query params (`token`). Prevents churn when Yattee-server re-signs URLs.
+/// Adds the instance proxy's Basic auth header to image requests that need it.
+private final class AuthorizingDataLoader: DataLoading {
+    private let base: DataLoader
+
+    init(base: DataLoader) {
+        self.base = base
+    }
+
+    func loadData(
+        with request: URLRequest,
+        didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
+        completion: @escaping @Sendable (Error?) -> Void
+    ) -> any Cancellable {
+        base.loadData(
+            with: InstanceRequestAuth.shared.authorized(request),
+            didReceiveData: didReceiveData,
+            completion: completion
+        )
+    }
+}
+
 private final class TokenStrippingPipelineDelegate: ImagePipelineDelegate {
     func cacheKey(for request: ImageRequest, pipeline _: ImagePipeline) -> String? {
         guard let url = request.url else { return nil }

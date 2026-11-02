@@ -277,6 +277,13 @@ final class AppEnvironment {
         self.downloadManager.setDownloadSettings(self.downloadSettings)
         self.downloadManager.setStreamRefreshDependencies(contentService: contentSvc, instancesManager: instances)
         instances.startAddressMonitoring()
+        Self.refreshInstanceRequestAuth(instancesManager: instances, basicAuth: basicAuthCreds)
+        NotificationCenter.default.addObserver(forName: .instancesDidChange, object: nil, queue: .main) { [weak instances, weak basicAuthCreds] _ in
+            Task { @MainActor in
+                guard let instances, let basicAuthCreds else { return }
+                Self.refreshInstanceRequestAuth(instancesManager: instances, basicAuth: basicAuthCreds)
+            }
+        }
         // FORK (offline-sponsorblock): let the download manager capture SponsorBlock
         // segments at download time so sponsor skipping works offline.
         self.downloadManager.setSponsorBlockDependencies(
@@ -479,6 +486,19 @@ final class AppEnvironment {
     /// Returns the appropriate credentials manager for an instance type.
     /// - Parameter instance: The instance to get a credentials manager for
     /// - Returns: The credentials manager, or nil if the instance type doesn't support authentication
+    /// Gives non-API requests (thumbnails, storyboards, captions) the reverse-proxy credentials
+    /// for any instance currently reached through its external address.
+    static func refreshInstanceRequestAuth(instancesManager: InstancesManager, basicAuth: BasicAuthCredentialsManager) {
+        var headers: [String: String] = [:]
+        for instance in instancesManager.instances where instance.isUsingExternalAddress {
+            if let host = instance.url.host?.lowercased(),
+               let header = basicAuth.basicAuthHeader(for: instance) {
+                headers[host] = header
+            }
+        }
+        InstanceRequestAuth.shared.update(headers)
+    }
+
     func credentialsManager(for instance: Instance) -> (any InstanceCredentialsManager)? {
         switch instance.type {
         case .invidious:

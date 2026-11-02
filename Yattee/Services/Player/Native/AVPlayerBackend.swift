@@ -289,7 +289,7 @@ final class AVPlayerBackend: PlayerBackend {
         layerView.apply(style: SettingsManager.subtitleSettingsSync())
         captionTask = Task { [weak self] in
             do {
-                let (data, _) = try await URLSession.shared.data(from: caption.url)
+                let (data, _) = try await URLSession.shared.data(for: InstanceRequestAuth.shared.request(for: caption.url))
                 let cues = NativeCaptionParser.parse(String(decoding: data, as: UTF8.self))
                 guard !Task.isCancelled, let self else { return }
                 if cues.isEmpty {
