@@ -36,6 +36,7 @@ private struct EditRemoteServerContent: View {
     @State private var allowInvalidCertificates: Bool
     @State private var proxiesVideos: Bool
     @State private var externalAddress: String
+    @State private var directPlayback: Bool
 
     // HTTP Basic Auth credentials (for any instance type behind a reverse proxy;
     // required for Yattee Server, optional for Invidious/Piped/PeerTube).
@@ -67,6 +68,7 @@ private struct EditRemoteServerContent: View {
         _allowInvalidCertificates = State(initialValue: instance.allowInvalidCertificates)
         _proxiesVideos = State(initialValue: instance.proxiesVideos)
         _externalAddress = State(initialValue: instance.externalURL?.absoluteString ?? "")
+        _directPlayback = State(initialValue: instance.directPlayback)
     }
 
     var body: some View {
@@ -136,6 +138,14 @@ private struct EditRemoteServerContent: View {
                     .foregroundStyle(.red)
             }
 
+            if instance.type == .invidious, !externalAddress.trimmingCharacters(in: .whitespaces).isEmpty {
+                #if os(tvOS)
+                TVSettingsToggle(title: String(localized: "sources.field.directPlayback"), isOn: $directPlayback)
+                #else
+                Toggle(String(localized: "sources.field.directPlayback"), isOn: $directPlayback)
+                #endif
+            }
+
             if instance.externalURL != nil {
                 LabeledContent(
                     String(localized: "sources.field.currentAddress"),
@@ -146,6 +156,7 @@ private struct EditRemoteServerContent: View {
             }
         } footer: {
             Text(String(localized: "sources.field.externalAddress.footer"))
+            + Text(instance.type == .invidious ? "\n\n" + String(localized: "sources.field.directPlayback.footer") : "")
         }
     }
 
@@ -511,6 +522,7 @@ private struct EditRemoteServerContent: View {
         if instance.isYouTubeInstance, !instance.isYatteeServerInstance {
             let trimmed = externalAddress.trimmingCharacters(in: .whitespaces)
             updated.externalURL = trimmed.isEmpty ? nil : (isExternalAddressValid ? URL(string: trimmed) : updated.externalURL)
+            updated.directPlayback = instance.type == .invidious && updated.externalURL != nil && directPlayback
         }
         updated.isEnabled = isEnabled
         updated.allowInvalidCertificates = allowInvalidCertificates

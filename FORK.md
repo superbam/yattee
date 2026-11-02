@@ -154,3 +154,19 @@ upstream edits routinely shift them.
 - The Invidious-fork backend changes live in `superbam/invidious` (branch
   `shorts-filter`): `isShort` in the JSON API + the `/api/v1/auth/positions`
   endpoints, all marked `# shorts-filter`.
+
+- **external-address / direct-playback** — an instance can carry a second
+  (`externalURL`) address, synced with the instance list through iCloud.
+  `InstancesManager` vends copies whose `url` is swapped to the external address
+  while the home address does not answer (device-local, re-checked on launch,
+  foreground, network change). Same instance ID, so login/feed/history are shared.
+  On the external address video is relayed through the server and Basic auth
+  credentials are sent to it only (`InstanceRequestAuth` covers images,
+  storyboards and captions). **Direct playback** (opt-in per instance, Invidious
+  only): the device fetches stream links itself (`DirectLinkResolver`) using a
+  short-lived token and the player script from a patched
+  `invidious-companion` (`/session/:id`, `/playerScript/:id`, built from
+  `~/ops/companion-spike` on the server), solves the `n` challenge in
+  JavaScriptCore, and falls back to the server's streams on any failure. The
+  edge nginx (`~/ops/invidious-edge`) serves it under `/direct/*` behind the
+  same key as everything else.

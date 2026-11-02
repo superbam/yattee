@@ -944,7 +944,7 @@ extension InvidiousAPI {
         LoggingService.shared.info("Proxying streams through \(instance.displayName) (user-enabled)", category: .player)
 
         return streams.map { stream in
-            if isYouTubeCDNURL(stream.url) {
+            if isYouTubeCDNURL(stream.url), !stream.isDirect {
                 // The instance may sit behind a basic-auth reverse proxy; the player and
                 // downloader fetch the relayed URL themselves, so they need the credentials.
                 return stream.withURL(

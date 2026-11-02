@@ -16617,6 +16617,26 @@
         }
       }
     },
+    "sources.field.directPlayback" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetch Video Links on This Device (Experimental)"
+          }
+        }
+      }
+    },
+    "sources.field.directPlayback.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On the external address, this device asks YouTube for the video links itself, so video comes straight from YouTube instead of through your server. The server only supplies a short-lived token. If it fails, playback falls back to relaying through the server. Check Settings > Advanced > Developer > Logs for \"Direct playback\" entries."
+          }
+        }
+      }
+    },
     "sources.field.enabled" : {
       "comment" : "Field label for enabled toggle",
       "localizations" : {

@@ -66,6 +66,10 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
     /// Both addresses are the same instance: one login, one feed, one history.
     var externalURL: URL?
 
+    /// Experimental, opt-in. While the external address is in use, fetch stream links on
+    /// this device instead of relaying video through the server (see `DirectLinkResolver`).
+    var directPlayback: Bool
+
     /// Optional user-defined name for this instance.
     var name: String?
 
@@ -119,7 +123,8 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         isShortsFilterFork: Bool? = nil,
         usesBasicAuth: Bool = false,
         usesAccountLogin: Bool = false,
-        externalURL: URL? = nil
+        externalURL: URL? = nil,
+        directPlayback: Bool = false
     ) {
         self.id = id
         self.type = type
@@ -134,6 +139,7 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         self.usesBasicAuth = usesBasicAuth
         self.usesAccountLogin = usesAccountLogin
         self.externalURL = externalURL
+        self.directPlayback = directPlayback
     }
 
     init(from decoder: Decoder) throws {
@@ -151,6 +157,7 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
         usesBasicAuth = try container.decodeIfPresent(Bool.self, forKey: .usesBasicAuth) ?? false
         usesAccountLogin = try container.decodeIfPresent(Bool.self, forKey: .usesAccountLogin) ?? false
         externalURL = try container.decodeIfPresent(URL.self, forKey: .externalURL)
+        directPlayback = try container.decodeIfPresent(Bool.self, forKey: .directPlayback) ?? false
     }
 
     // MARK: - Computed Properties
@@ -159,6 +166,12 @@ struct Instance: Identifiable, Codable, Hashable, Sendable {
     var isUsingExternalAddress: Bool {
         guard let externalURL else { return false }
         return url == externalURL
+    }
+
+    /// Whether stream links should be fetched by this device (opt-in, external address only,
+    /// Invidious only). Away from home the server's links don't work for this device.
+    var usesDirectPlayback: Bool {
+        directPlayback && type == .invidious && isUsingExternalAddress
     }
 
     /// Whether video streams should be routed through this instance. Always true on the

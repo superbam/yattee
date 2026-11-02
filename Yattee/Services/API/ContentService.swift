@@ -232,7 +232,41 @@ actor ContentService: ContentServiceProtocol {
     }
 
     func streams(videoID: String, instance: Instance) async throws -> [Stream] {
-        try await api(for: instance).streams(videoID: videoID, instance: instance)
+        let streams = try await api(for: instance).streams(videoID: videoID, instance: instance)
+        guard instance.type == .invidious else { return streams }
+        return await directStreams(replacing: streams, videoID: videoID, instance: instance)
+    }
+
+    /// Optional "direct playback": when the instance has opted in and is reached through its
+    /// external address, fetch stream links on this device so the video comes straight from
+    /// YouTube. Any failure falls back to the server's streams (relayed through it).
+    private func directStreams(replacing streams: [Stream], videoID: String, instance: Instance) async -> [Stream] {
+        guard instance.usesDirectPlayback, !streams.contains(where: \.isLive) else { return streams }
+
+        let authorization = await basicAuthCredentialsManager?.basicAuthHeader(for: instance)
+        let started = Date()
+        do {
+            let formats = try await DirectLinkResolver.shared.resolve(
+                videoID: videoID,
+                baseURL: instance.url,
+                authorization: authorization
+            )
+            let direct = formats.compactMap { $0.toStream() }
+            guard !direct.isEmpty else { return streams }
+            LoggingService.shared.info(
+                "Direct playback: \(direct.count) streams fetched on this device",
+                category: .player,
+                details: String(format: "video: %@, took %.2fs", videoID, Date().timeIntervalSince(started))
+            )
+            return direct
+        } catch {
+            LoggingService.shared.warning(
+                "Direct playback failed, using the server's streams",
+                category: .player,
+                details: "video: \(videoID), \(error.localizedDescription)"
+            )
+            return streams
+        }
     }
 
     func captions(videoID: String, instance: Instance) async throws -> [Caption] {
@@ -285,7 +319,9 @@ actor ContentService: ContentServiceProtocol {
     func videoWithStreamsAndCaptionsAndStoryboards(id: String, instance: Instance) async throws -> (video: Video, streams: [Stream], captions: [Caption], storyboards: [Storyboard]) {
         switch instance.type {
         case .invidious:
-            return try await invidiousAPI(for: instance).videoWithStreamsAndCaptionsAndStoryboards(id: id, instance: instance)
+            var result = try await invidiousAPI(for: instance).videoWithStreamsAndCaptionsAndStoryboards(id: id, instance: instance)
+            result.streams = await directStreams(replacing: result.streams, videoID: id, instance: instance)
+            return result
         case .yatteeServer:
             // When the user has opted into proxying for this Yattee Server source,
             // fetch playback streams through the server's /proxy/relay byte-relay

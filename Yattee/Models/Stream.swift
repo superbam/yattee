@@ -85,6 +85,11 @@ struct Stream: Identifiable, Codable, Hashable, Sendable {
     var dashInitRange: String?
     var dashIndexRange: String?
 
+    /// Whether this link was fetched by this device straight from YouTube ("direct
+    /// playback"). It is already valid for this device, so it must not be rewritten to go
+    /// through the instance.
+    var isDirect: Bool = false
+
     // MARK: - Initialization
 
     init(
@@ -104,7 +109,8 @@ struct Stream: Identifiable, Codable, Hashable, Sendable {
         httpHeaders: [String: String]? = nil,
         fps: Int? = nil,
         dashInitRange: String? = nil,
-        dashIndexRange: String? = nil
+        dashIndexRange: String? = nil,
+        isDirect: Bool = false
     ) {
         self.url = url
         self.resolution = resolution
@@ -123,6 +129,7 @@ struct Stream: Identifiable, Codable, Hashable, Sendable {
         self.fps = fps
         self.dashInitRange = dashInitRange
         self.dashIndexRange = dashIndexRange
+        self.isDirect = isDirect
     }
 
     // MARK: - Computed Properties
@@ -257,7 +264,8 @@ extension Stream {
             audioTrackName: audioTrackName,
             isOriginalAudio: isOriginalAudio,
             httpHeaders: mergedHeaders,
-            fps: fps
+            fps: fps,
+            isDirect: isDirect
         )
     }
 }
