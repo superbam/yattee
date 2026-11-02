@@ -129,6 +129,12 @@ actor HTTPClient {
             }
         }
 
+        // An instance reached through its external address sits behind a reverse proxy that
+        // rejects requests without its key. Many callers build their own API client around
+        // the shared HTTPClient, so the key is applied here for the registered host
+        // (never overriding an Authorization header a caller already set).
+        mutableRequest = InstanceRequestAuth.shared.authorized(mutableRequest)
+
         let method = mutableRequest.httpMethod ?? "GET"
         let requestURL = mutableRequest.url ?? URL(string: "unknown")!
         let finalRequest = mutableRequest

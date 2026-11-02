@@ -416,6 +416,8 @@ actor InvidiousAPI: InstanceAPI {
             }
         }
 
+        request = InstanceRequestAuth.shared.authorized(request)
+
         // Use a session that doesn't follow redirects so we can capture the Set-Cookie header
         let sessionConfig = URLSessionConfiguration.ephemeral
         let session = URLSession(configuration: sessionConfig, delegate: RedirectBlocker(), delegateQueue: nil)
